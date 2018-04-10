@@ -18,7 +18,7 @@ test(`Should call the onError callback in the case of an error in npm info`, asy
     try {
         await wrapPromise(async (reject) => {
 
-            const MODULE_NAME = 'do-it-live-test-module';
+            const MODULE_NAME = 'grabthar-test-module';
 
             exec = mockExec();
 
@@ -64,7 +64,7 @@ test(`Should call the onError callback in the case of an error in npm install`, 
     try {
         await wrapPromise(async (reject) => {
 
-            const MODULE_NAME = 'do-it-live-test-module';
+            const MODULE_NAME = 'grabthar-test-module';
             const MODULE_VERSION = '1.3.53';
 
             let pkg = {
@@ -121,7 +121,7 @@ test(`Should call the onError callback in the case of an error in npm install`, 
 test(`Should fail when trying to get a module other than latest when tags not specified`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
 
         let pkg = {
@@ -174,7 +174,7 @@ test(`Should fail when trying to get a module other than latest when tags not sp
 test(`Should fail when trying to get a module not specified in tags`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
 
         let pkg = {
@@ -229,7 +229,7 @@ test(`Should fail when trying to get a module not specified in tags`, async () =
 test(`Should fail when trying to get latest module not specified in tags`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
 
         let pkg = {

@@ -12,7 +12,7 @@ beforeEach(() => {
 test(`Should poll for a module and install it, then return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
@@ -92,7 +92,7 @@ test(`Should poll for a module and install it, then return the correct latest ve
 test(`Should poll for a module and install it, then explicitly return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
@@ -173,7 +173,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
 test(`Should poll for a module and install it, then return the correct release version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
@@ -254,7 +254,7 @@ test(`Should poll for a module and install it, then return the correct release v
 test(`Should poll for a module and install it, then explicitly return the correct release version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
@@ -335,7 +335,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
 test(`Should use the base version if the latest version is not available`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '1.3.53';
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
@@ -398,7 +398,7 @@ test(`Should use the base version if the latest version is not available`, async
 test(`Should install both release and latest versions if they are different`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'do-it-live-test-module';
+        const MODULE_NAME = 'grabthar-test-module';
         const RELEASE_VERSION = '1.2.563';
         const LATEST_VERSION = '1.0.4';
 

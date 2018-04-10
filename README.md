@@ -6,7 +6,7 @@ Because npm installing in production every 30 seconds is a great idea, right? ..
 ## Quick Start
 
 ```bash
-npm install --save do-it-live
+npm install --save grabthar
 ```
 
 ## Examples
@@ -14,7 +14,7 @@ npm install --save do-it-live
 Hot deploy and serve up static files:
 
 ```javascript
-import { poll } from 'do-it-live';
+import { poll } from 'grabthar';
 
 let watcher = poll({
   name: 'my-live-updating-module'
@@ -29,7 +29,7 @@ app.get('/foo.js', async function handleRequest(req, res) {
 Or if you're feeling *really* brave, hot deploy and require new code:
 
 ```javascript
-import { poll } from 'do-it-live';
+import { poll } from 'grabthar';
 
 let watcher = poll({
   name: 'my-live-updating-module'
@@ -43,7 +43,7 @@ app.get('/api/foo', async function handleRequest(req, res) {
 
 ## Deploying
 
-By default `do-it-live` will use the current `latest` tag of your chosen module, from npm.
+By default `grabthar` will use the current `latest` tag of your chosen module, from npm.
 
 So, to deploy and activate new code, just:
 
@@ -59,7 +59,7 @@ This will automatically set the `latest` tag to the latest version.
 To separate out the deployment and activation of new code, you can make use of different npm dist-tags:
 
 ```javascript
-import { poll } from 'do-it-live';
+import { poll } from 'grabthar';
 
 let watcher = poll({
   name: 'my-live-updating-module',
@@ -85,7 +85,7 @@ To activate:
 npm dist-tag add my-live-updating-module@x.x.x release
 ```
 
-`do-it-live` will monitor and install anything passed in `tags`, but the activated version will only change when you set a new `release` dist tag.
+`grabthar` will monitor and install anything passed in `tags`, but the activated version will only change when you set a new `release` dist tag.
 
 ## Rolling back to old versions
 
