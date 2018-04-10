@@ -6,13 +6,24 @@ import { homedir } from 'os';
 import { mkdir, exists } from 'fs-extra';
 import { exec } from 'npm-run';
 
+export async function makedir(dir : string) : Promise<void> {
+    try {
+        if (!await exists(dir)) {
+            await mkdir(dir);
+        }
+    } catch (err) {
+        if (err.code === 'EEXIST') {
+            return;
+        }
+        throw err;
+    }
+}
+
 export async function createDirectory(dir : string, ...names : Array<string>) : Promise<string> {
     let path = dir;
     for (let name of names) {
         path = join(path, name);
-        if (!await exists(path)) {
-            await mkdir(path);
-        }
+        await makedir(path);
     }
     return path;
 }
