@@ -447,13 +447,48 @@ test(`Should install both release and latest versions if they are different`, as
 
             if (next.cmd.args[2] === `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
                 releaseVersionInstalled = true;
+
+                await next.res(JSON.stringify({}));
+
+                next = await exec.next();
+                checkNpmOptions(next.cmd);
+
+                if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
+                    throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ RELEASE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+                }
+
+                await next.res(JSON.stringify(pkg));
+
+                let { version: releaseVersion } = await poller.get('release');
+
+                if (releaseVersion !== RELEASE_VERSION) {
+                    throw new Error(`Expected npm install version '${ RELEASE_VERSION }' to match moduleVersion '${ releaseVersion }'`);
+                }
+
+
             } else if (next.cmd.args[2] === `${ MODULE_NAME }@${ LATEST_VERSION }`) {
                 latestVersionInstalled = true;
+
+                await next.res(JSON.stringify({}));
+
+                next = await exec.next();
+                checkNpmOptions(next.cmd);
+
+                if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ LATEST_VERSION }`) {
+                    throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ LATEST_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+                }
+
+                await next.res(JSON.stringify(pkg));
+
+                let { version: latestVersion } = await poller.get('latest');
+
+                if (latestVersion !== LATEST_VERSION) {
+                    throw new Error(`Expected npm install version '${ LATEST_VERSION }' to match moduleVersion '${ latestVersion }'`);
+                }
+                
             } else {
                 throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ RELEASE_VERSION }' or 'npm install ${ MODULE_NAME }@${ LATEST_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
             }
-
-            await next.res(JSON.stringify({}));
         }
 
         if (!releaseVersionInstalled) {
@@ -463,41 +498,7 @@ test(`Should install both release and latest versions if they are different`, as
         if (!latestVersionInstalled) {
             throw new Error(`Expected latest version to be installed`);
         }
-
-        let releasePollerPromise = poller.get('release');
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ RELEASE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version: releaseVersion } = await releasePollerPromise;
-
-        if (releaseVersion !== RELEASE_VERSION) {
-            throw new Error(`Expected npm install version '${ RELEASE_VERSION }' to match moduleVersion '${ releaseVersion }'`);
-        }
-
-        let latestPollerPromise = poller.get('latest');
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ LATEST_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ LATEST_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version: latestVersion } = await latestPollerPromise;
-
-        if (latestVersion !== LATEST_VERSION) {
-            throw new Error(`Expected npm install version '${ LATEST_VERSION }' to match moduleVersion '${ latestVersion }'`);
-        }
-
+        
         exec.cancel();
         poller.cancel();
     });

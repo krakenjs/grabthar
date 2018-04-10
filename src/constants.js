@@ -6,5 +6,7 @@ export const DIST_TAG = {
     LATEST:  'latest'
 };
 
+export const NODE_MODULES = 'node_modules';
+
 export const NPM = 'npm';
 export const DOTNPM = '.npm';

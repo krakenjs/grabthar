@@ -61,6 +61,7 @@ export function mockExec() : MockExec {
 
         if (nextResolve) {
             nextResolve(buffer.shift());
+            nextResolve = null;
         }
     };
     return {
