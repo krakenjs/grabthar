@@ -1,0 +1,7 @@
+node_modules
+flow-typed
+npm-debug.log
+
+.DS_Store
+**/*.flow
+coverage
