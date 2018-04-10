@@ -5,65 +5,85 @@ import { poll, createHomeDirectory, type Poller, memoize } from './util';
 import { MODULE_ROOT_NAME } from './config';
 import { DIST_TAG } from './constants';
 
-export type ModuleDetails = {
-    moduleRoot : string,
-    moduleVersion : string
+type PollModuleDetails = {
+    root : string,
+    version : string
 };
 
-function pollInstallDistTag({ moduleName, onError, distTag, period = 20 } : { moduleName : string, distTag : string, onError : (Error) => void, period? : number }) : Poller<ModuleDetails> {
-    let moduleRoot;
-    let moduleVersion;
+function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : string, tag : string, onError : (Error) => void, period? : number }) : Poller<PollModuleDetails> {
+    let root;
+    let version;
 
     return poll({
         handler: async () => {
-            let newVersion = await getRemotePackageDistTagVersion(moduleName, distTag);
+            let newVersion = await getRemotePackageDistTagVersion(name, tag);
 
-            if (!moduleVersion || moduleVersion !== newVersion) {
-                let newModuleRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ moduleName }_${ newVersion }`);
-                await install(moduleName, newVersion, newModuleRoot);
+            if (!version || version !== newVersion) {
+                let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name }_${ newVersion }`);
+                await install(name, newVersion, newRoot);
 
-                moduleVersion = newVersion;
-                moduleRoot = newModuleRoot;
+                version = newVersion;
+                root = newRoot;
             }
 
-            return { moduleRoot, moduleVersion };
+            return { root, version };
         },
         period: period * 1000,
         onError
     }).start();
 }
 
+export type ModuleDetails = {
+    root : string,
+    version : string,
+    dependencies : { [string] : string }
+};
+
 type NpmWatcher = {
-    getReleaseModule : () => Promise<ModuleDetails>,
-    getLatestModule : () => Promise<ModuleDetails>,
-    getReleaseModuleDependencies : () => Promise<{ [string] : string }>,
-    getLatestModuleDependencies : () => Promise<{ [string] : string }>,
+    get : (tag? : string) => Promise<ModuleDetails>,
     cancel : () => void
 };
 
-export function npmPoll({ moduleName, onError, period = 20 } : { moduleName : string, onError : (Error) => void, period? : number }) : NpmWatcher {
+type NPMPollOptions = {
+    name : string,
+    tags? : Array<string>,
+    onError : (Error) => void,
+    period? : number
+};
 
-    let releasePoller = pollInstallDistTag({ moduleName, distTag: DIST_TAG.RELEASE, onError, period });
-    let latestPoller  = pollInstallDistTag({ moduleName, distTag: DIST_TAG.LATEST, onError, period });
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20 } : NPMPollOptions) : NpmWatcher {
+
+    let pollers = {};
+
+    for (let tag of tags) {
+        pollers[tag] = pollInstallDistTag({ name, tag, onError, period });
+    }
 
     return {
-        getReleaseModule: async () => {
-            return await releasePoller.result();
-        },
-        getLatestModule: async () => {
-            return await latestPoller.result();
-        },
-        getReleaseModuleDependencies: async () => {
-            let { moduleVersion } = await releasePoller.result();
-            return await getModuleDependencies(moduleName, moduleVersion);
-        },
-        getLatestModuleDependencies: async () => {
-            let { moduleVersion } = await latestPoller.result();
-            return await getModuleDependencies(moduleName, moduleVersion);
+        get: async (tag? : string) => {
+
+            if (tag && !pollers[tag]) {
+                throw new Error(`Invalid tag: ${ tag }`);
+            }
+
+            if (!tag) {
+                if (tags.length === 1) {
+                    tag = tags[0];
+                } else if (pollers[DIST_TAG.LATEST]) {
+                    tag = DIST_TAG.LATEST;
+                } else {
+                    throw new Error(`Please specify tag: one of ${ tags.join(', ') }`);
+                }
+            }
+
+            let { root, version } = await pollers[tag || DIST_TAG.LATEST].result();
+            let dependencies = await getModuleDependencies(name, version);
+            return { root, version, dependencies };
         },
         cancel: () => {
-            releasePoller.stop();
-            latestPoller.stop();
+            for (let tag of tags) {
+                pollers[tag].stop();
+            }
         }
     };
 }

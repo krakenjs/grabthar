@@ -1,7 +1,7 @@
 /* @flow */
 
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
-import { DIST_TAGS, NPM } from './constants';
+import { DIST_TAGS, NPM, DIST_TAG } from './constants';
 import { memoize, memoizePromise, npmRun } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
@@ -37,28 +37,31 @@ type Package = {
     }
 };
 
-export let getRemotePackage = memoizePromise(async (moduleName : string) : Promise<Package> => {
-    return await npm('info', [ moduleName ]);
+export let getRemotePackage = memoizePromise(async (name : string) : Promise<Package> => {
+    return await npm('info', [ name ]);
 });
 
-export async function getModuleDependencies(moduleName : string, moduleVersion : string) : { [string] : string } {
-    let pkg = await getRemotePackage(`${ moduleName }@${ moduleVersion }`);
+export async function getModuleDependencies(name : string, version : string) : { [string] : string } {
+    let pkg = await getRemotePackage(`${ name }@${ version }`);
     if (!pkg.dependencies) {
-        throw new Error(`Could not get dependencies for ${ moduleName }`);
+        throw new Error(`Could not get dependencies for ${ name }`);
     }
     return pkg.dependencies;
 }
 
-export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : string, distTag : string) : Promise<string> => {
+export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : string, tag : string) : Promise<string> => {
     let pkg = await getRemotePackage(moduleName);
-    let latest = pkg[DIST_TAGS] && pkg[DIST_TAGS][distTag];
-    let version = latest || pkg.version;
+    let version = pkg[DIST_TAGS] && pkg[DIST_TAGS][tag];
     if (!version) {
-        throw new Error(`Can not determine ${ distTag } version of ${ moduleName } from\n\n${ JSON.stringify(pkg, null, 4) }`);
+        if (tag === DIST_TAG.LATEST && pkg.version) {
+            return pkg.version;
+        }
+
+        throw new Error(`Can not determine ${ tag } version of ${ moduleName } from\n\n${ JSON.stringify(pkg, null, 4) }`);
     }
     return version;
 });
 
-export let install = memoize(async (moduleName : string, version : string, dir : string) : Promise<Object> => {
-    return await npm('install', [ `${ moduleName }@${ version }`, '--prefix', dir ]);
+export let install = memoize(async (name : string, version : string, dir : string) : Promise<Object> => {
+    return await npm('install', [ `${ name }@${ version }`, '--prefix', dir ]);
 });
