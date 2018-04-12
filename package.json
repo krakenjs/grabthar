@@ -16,19 +16,18 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/krakenjs/subprocess-robot.git"
+    "url": "git+https://github.com/krakenjs/grabthar.git"
   },
   "keywords": [
-    "process",
-    "subprocess",
+    "hot install",
     "node"
   ],
   "author": "dbrain",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/krakenjs/subprocess-robot/issues"
+    "url": "https://github.com/krakenjs/grabthar/issues"
   },
-  "homepage": "https://github.com/krakenjs/subprocess-robot#readme",
+  "homepage": "https://github.com/krakenjs/grabthar#readme",
   "devDependencies": {
     "flow-bin": "^0.69.0",
     "grumbler-scripts": "^2.0.7",
