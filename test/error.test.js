@@ -69,6 +69,7 @@ test(`Should call the onError callback in the case of an error in npm install`, 
 
             let pkg = {
                 'version':   MODULE_VERSION,
+                'versions':  [ MODULE_VERSION ],
                 'dist-tags': {
                     'latest': MODULE_VERSION
                 }
@@ -126,6 +127,7 @@ test(`Should fail when trying to get a module other than latest when tags not sp
 
         let pkg = {
             'version':   MODULE_VERSION,
+            'versions':  [ MODULE_VERSION ],
             'dist-tags': {
                 'latest': MODULE_VERSION
             }
@@ -179,6 +181,7 @@ test(`Should fail when trying to get a module not specified in tags`, async () =
 
         let pkg = {
             'version':   MODULE_VERSION,
+            'versions':  [ MODULE_VERSION ],
             'dist-tags': {
                 'release': MODULE_VERSION,
                 'foo':     MODULE_VERSION
@@ -234,6 +237,7 @@ test(`Should fail when trying to get latest module not specified in tags`, async
 
         let pkg = {
             'version':   MODULE_VERSION,
+            'versions':  [ MODULE_VERSION ],
             'dist-tags': {
                 'release': MODULE_VERSION,
                 'foo':     MODULE_VERSION

@@ -25,6 +25,7 @@ test(`Should poll for a module and install it, then return the correct latest ve
             'dist-tags': {
                 'latest': MODULE_VERSION
             },
+            'versions':     [ MODULE_VERSION ],
             'dependencies': MODULE_DEPENDENCIES
         };
 
@@ -70,10 +71,10 @@ test(`Should poll for a module and install it, then return the correct latest ve
 
         await next.res(JSON.stringify(pkg));
 
-        let { root, version, dependencies } = await pollerPromise;
+        let { rootPath, version, dependencies } = await pollerPromise;
 
-        if (root !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ root }'`);
+        if (rootPath !== prefix) {
+            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
         }
 
         if (version !== MODULE_VERSION) {
@@ -105,6 +106,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
             'dist-tags': {
                 'latest': MODULE_VERSION
             },
+            'versions':     [ MODULE_VERSION ],
             'dependencies': MODULE_DEPENDENCIES
         };
 
@@ -151,10 +153,10 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify(pkg));
 
-        let { root, version, dependencies } = await pollerPromise;
+        let { rootPath, version, dependencies } = await pollerPromise;
 
-        if (root !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ root }'`);
+        if (rootPath !== prefix) {
+            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
         }
 
         if (version !== MODULE_VERSION) {
@@ -186,6 +188,7 @@ test(`Should poll for a module and install it, then return the correct release v
             'dist-tags': {
                 'release': MODULE_VERSION
             },
+            'versions':     [ MODULE_VERSION ],
             'dependencies': MODULE_DEPENDENCIES
         };
 
@@ -232,10 +235,10 @@ test(`Should poll for a module and install it, then return the correct release v
 
         await next.res(JSON.stringify(pkg));
 
-        let { root, version, dependencies } = await pollerPromise;
+        let { rootPath, version, dependencies } = await pollerPromise;
 
-        if (root !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ root }'`);
+        if (rootPath !== prefix) {
+            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
         }
 
         if (version !== MODULE_VERSION) {
@@ -267,6 +270,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
             'dist-tags': {
                 'release': MODULE_VERSION
             },
+            'versions':     [ MODULE_VERSION ],
             'dependencies': MODULE_DEPENDENCIES
         };
 
@@ -313,10 +317,10 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify(pkg));
 
-        let { root, version, dependencies } = await pollerPromise;
+        let { rootPath, version, dependencies } = await pollerPromise;
 
-        if (root !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ root }'`);
+        if (rootPath !== prefix) {
+            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
         }
 
         if (version !== MODULE_VERSION) {
@@ -345,6 +349,7 @@ test(`Should use the base version if the latest version is not available`, async
 
         let pkg = {
             'version':      MODULE_VERSION,
+            'versions':     [ MODULE_VERSION ],
             'dependencies': MODULE_DEPENDENCIES
         };
 
@@ -414,6 +419,7 @@ test(`Should install both release and latest versions if they are different`, as
                 'latest':  LATEST_VERSION,
                 'release': RELEASE_VERSION
             },
+            'versions':     [ LATEST_VERSION, RELEASE_VERSION ],
             'dependencies': MODULE_DEPENDENCIES
         };
 

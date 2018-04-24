@@ -2,56 +2,85 @@
 
 import { join } from 'path';
 
-import { install, getRemotePackageDistTagVersion, getModuleDependencies } from './npm';
-import { poll, createHomeDirectory, type Poller, memoize } from './util';
+import { install, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions } from './npm';
+import { poll, createHomeDirectory, memoize } from './util';
 import { MODULE_ROOT_NAME } from './config';
-import { DIST_TAG, NODE_MODULES } from './constants';
+import { DIST_TAG, NODE_MODULES, STABILITY } from './constants';
 
-type PollModuleDetails = {
-    root : string,
-    path : string,
+type ModuleDetails = {
+    rootPath : string,
+    nodeModulesPath : string,
+    modulePath : string,
     version : string,
     dependencies : { [string] : string }
 };
 
-function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : string, tag : string, onError : (Error) => void, period? : number }) : Poller<PollModuleDetails> {
+async function installVersion({ name, version }) : Promise<ModuleDetails> {
+    let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name }_${ version }`);
+
+    let installPromise = install(name, version, newRoot);
+    let dependenciesPromise = getModuleDependencies(name, version);
+
+    await installPromise;
+
+    let rootPath = newRoot;
+    let nodeModulesPath = join(rootPath, NODE_MODULES);
+    let modulePath = join(nodeModulesPath, name);
+    let dependencies = await dependenciesPromise;
+
+    return { rootPath, nodeModulesPath, modulePath, version, dependencies };
+}
+
+type DistPoller<T> = {
+    result : () => Promise<T>,
+    stop : () => void,
+    markStable : (string) => void,
+    markUnstable : (string) => void
+};
+
+function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : string, tag : string, onError : (Error) => void, period? : number }) : DistPoller<ModuleDetails> {
     
-    let root;
-    let path;
-    let version;
-    let dependencies;
+    let stability : { [string] : string } = {};
 
-    return poll({
+    let poller = poll({
         handler: async () => {
-            let newVersion = await getRemotePackageDistTagVersion(name, tag);
+            let [ version, allVersions ] = await Promise.all([
+                getRemotePackageDistTagVersion(name, tag),
+                getRemoteModuleVersions(name)
+            ]);
 
-            if (!version || version !== newVersion) {
-                let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name }_${ newVersion }`);
+            stability[version] = stability[version] || STABILITY.STABLE;
+            allVersions = allVersions.filter(ver => stability[ver] !== STABILITY.UNSTABLE);
+            let stableVersions = allVersions.filter(ver => stability[ver] === STABILITY.STABLE);
 
-                let installPromise = install(name, newVersion, newRoot);
-                let dependenciesPromise = getModuleDependencies(name, newVersion);
-
-                await installPromise;
-
-                root = newRoot;
-                path = join(root, NODE_MODULES, name);
-                version = newVersion;
-                dependencies = await dependenciesPromise;
+            if (!allVersions.length) {
+                throw new Error(`No available version found for module ${ name }`);
             }
 
-            return { root, path, version, dependencies };
+            let previousVersion = stableVersions.length ? stableVersions[0] : allVersions[0];
+
+            if (stability[version] === STABILITY.UNSTABLE) {
+                version = previousVersion;
+            }
+
+            let moduleDetails = await installVersion({ name, version });
+            return { ...moduleDetails, previousVersion };
         },
         period: period * 1000,
         onError
     }).start();
-}
 
-export type ModuleDetails = {
-    root : string,
-    path : string,
-    version : string,
-    dependencies : { [string] : string }
-};
+    return {
+        stop:       () => { poller.stop(); },
+        result:     async () => await poller.result(),
+        markStable: (version : string) => {
+            stability[version] = STABILITY.STABLE;
+        },
+        markUnstable: (version : string) => {
+            stability[version] = STABILITY.UNSTABLE;
+        }
+    };
+}
 
 type NpmWatcher = {
     get : (tag? : string) => Promise<ModuleDetails>,
@@ -93,9 +122,9 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20
     }
 
     async function pollerImport <T : Object>() : T {
-        let { path } = await pollerGet();
+        let { modulePath } = await pollerGet();
         // $FlowFixMe
-        return require(path); // eslint-disable-line security/detect-non-literal-require
+        return require(modulePath); // eslint-disable-line security/detect-non-literal-require
     }
 
     function pollerCancel() {
