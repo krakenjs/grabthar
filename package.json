@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "child-process-promise": "^2.2.1",
+    "compare-versions": "^3.1.0",
     "npm": "^3.10.10",
     "npm-run": "^4.1.2",
     "uuid": "^3.2.1"

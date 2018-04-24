@@ -10,3 +10,9 @@ export const NODE_MODULES = 'node_modules';
 
 export const NPM = 'npm';
 export const DOTNPM = '.npm';
+
+export const STABILITY = {
+    STABLE:   'stable',
+    UNSTABLE: 'unstable'
+};
+

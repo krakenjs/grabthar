@@ -21,8 +21,8 @@ let watcher = poll({
 });
 
 app.get('/foo.js', async function handleRequest(req, res) {
-  const { path } = await watcher.get();
-  res.sendFile(`${ path }/dist/foo.js`);
+  const { modulePath } = await watcher.get();
+  res.sendFile(`${ modulePath }/dist/foo.js`);
 });
 ```
 
@@ -67,8 +67,8 @@ let watcher = poll({
 });
 
 app.get('/foo.js', async function handleRequest(req, res) {
-  const { path } = await watcher.get('release');
-  res.sendFile(`${ path }/dist/foo.js`);
+  const { modulePath } = await watcher.get('release');
+  res.sendFile(`${ modulePath }/dist/foo.js`);
 });
 ```
 
@@ -108,11 +108,15 @@ const {
 
   // The root directory where the module is installed, e.g.
   // /Users/zippy/__live_modules__/my-live-updating-module_1.3.53 
-  root,
+  moduleRoot,
+
+  // The full path to the node_modules installed, e.g.
+  // /Users/zippy/__live_modules__/my-live-updating-module_1.3.53/node_modules/
+  nodeModulesPath,
 
   // The full path to your module, e.g.
   // /Users/zippy/__live_modules__/my-live-updating-module_1.3.53/node_modules/my-live-updating-module
-  path,
+  modulePath,
 
   // The semver version of your module that is currently installed and activated, e.g.
   // 1.3.53
