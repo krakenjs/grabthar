@@ -85,7 +85,9 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
 type NpmWatcher = {
     get : (tag? : string) => Promise<ModuleDetails>,
     import : <T: Object>() => Promise<T>,
-    cancel : () => void
+    cancel : () => void,
+    markStable : (string) => void,
+    markUnstable : (string) => void
 };
 
 type NPMPollOptions = {
@@ -133,10 +135,24 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20
         }
     }
 
+    function pollerMarkStable(version : string) {
+        for (let tag of tags) {
+            pollers[tag].markStable(version);
+        }
+    }
+
+    function pollerMarkUnstable(version : string) {
+        for (let tag of tags) {
+            pollers[tag].markUnstable(version);
+        }
+    }
+
     return {
-        get:    pollerGet,
-        import: pollerImport,
-        cancel: pollerCancel
+        get:          pollerGet,
+        import:       pollerImport,
+        cancel:       pollerCancel,
+        markStable:   pollerMarkStable,
+        markUnstable: pollerMarkUnstable
     };
 }
 
