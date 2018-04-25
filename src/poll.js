@@ -2,6 +2,8 @@
 
 import { join } from 'path';
 
+import compareVersions from 'compare-versions';
+
 import { install, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions } from './npm';
 import { poll, createHomeDirectory, memoize } from './util';
 import { MODULE_ROOT_NAME } from './config';
@@ -38,6 +40,10 @@ type DistPoller<T> = {
     markUnstable : (string) => void
 };
 
+function getMajorVersion(version : string) : string {
+    return version.split('.')[0];
+}
+
 function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : string, tag : string, onError : (Error) => void, period? : number }) : DistPoller<ModuleDetails> {
     
     let stability : { [string] : string } = {};
@@ -50,14 +56,39 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
             ]);
 
             stability[version] = stability[version] || STABILITY.STABLE;
-            allVersions = allVersions.filter(ver => stability[ver] !== STABILITY.UNSTABLE);
-            let stableVersions = allVersions.filter(ver => stability[ver] === STABILITY.STABLE);
+            let majorVersion = getMajorVersion(version);
 
-            if (!allVersions.length) {
-                throw new Error(`No available version found for module ${ name }`);
+            let eligibleVersions = allVersions.filter(ver => {
+
+                if (getMajorVersion(ver) !== majorVersion) {
+                    return false;
+                }
+
+                if (compareVersions(version, ver) !== -1) {
+                    return false;
+                }
+
+                if (stability[ver] === STABILITY.UNSTABLE) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            let stableVersions = eligibleVersions.filter(ver => {
+
+                if (stability[ver] !== STABILITY.STABLE) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            if (!eligibleVersions.length) {
+                throw new Error(`No eligible versions found for module ${ name }`);
             }
 
-            let previousVersion = stableVersions.length ? stableVersions[0] : allVersions[0];
+            let previousVersion = stableVersions.length ? stableVersions[0] : eligibleVersions[0];
 
             if (stability[version] === STABILITY.UNSTABLE) {
                 version = previousVersion;
