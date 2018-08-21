@@ -120,11 +120,11 @@ let memoizedFunctions = [];
 
 export function memoize<R : mixed, A : Array<*>> (method : (...args: A) => Promise<R> | R) : ((...args: A) => Promise<R> | R) {
 
-    let cache: { [key : string] : Promise<R> | R } = {};
+    let cache : { [key : string] : Promise<R> | R } = {};
 
     let resultFunction = function memoizedFunction(...args : A) : Promise<R> | R {
 
-        let key: string;
+        let key : string;
 
         try {
             key = JSON.stringify(Array.prototype.slice.call(args));
@@ -161,8 +161,7 @@ memoize.clear = () => {
 export function memoizePromise<R : mixed, A : Array<*>> (method : (...args: A) => Promise<R>) : ((...args: A) => Promise<R>) {
     let resultFunction = memoize((...args : A) => {
         let result = method(...args);
-
-        // eslint-disable-next-line promise/catch-or-return
+        
         result.then(resultFunction.clear, resultFunction.clear);
 
         return result;

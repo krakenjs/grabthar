@@ -50,30 +50,38 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
 
     let poller = poll({
         handler: async () => {
-            let [ version, allVersions ] = await Promise.all([
+            let [ distTagVersion, allVersions ] = await Promise.all([
                 getRemotePackageDistTagVersion(name, tag),
                 getRemoteModuleVersions(name)
             ]);
 
-            stability[version] = stability[version] || STABILITY.STABLE;
-            let majorVersion = getMajorVersion(version);
+            stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
+            let majorVersion = getMajorVersion(distTagVersion);
 
             let eligibleVersions = allVersions.filter(ver => {
 
+                // Do not allow versions that are not the major version of the dist-tag
                 if (getMajorVersion(ver) !== majorVersion) {
                     return false;
                 }
 
-                if (compareVersions(version, ver) !== -1) {
+                // Do not allow versions ahead of the current dist-tag
+                if (compareVersions(ver, distTagVersion) === 1) {
                     return false;
                 }
 
+                // Do not allow versions marked as unstable
                 if (stability[ver] === STABILITY.UNSTABLE) {
                     return false;
                 }
 
                 return true;
             });
+
+            if (!eligibleVersions.length) {
+                throw new Error(`No eligible versions found for module ${ name } -- from [ ${ allVersions.join(', ') } ]`);
+            }
+
 
             let stableVersions = eligibleVersions.filter(ver => {
 
@@ -84,17 +92,13 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
                 return true;
             });
 
-            if (!eligibleVersions.length) {
-                throw new Error(`No eligible versions found for module ${ name }`);
-            }
-
             let previousVersion = stableVersions.length ? stableVersions[0] : eligibleVersions[0];
 
-            if (stability[version] === STABILITY.UNSTABLE) {
-                version = previousVersion;
+            if (stability[distTagVersion] === STABILITY.UNSTABLE) {
+                distTagVersion = previousVersion;
             }
 
-            let moduleDetails = await installVersion({ name, version });
+            let moduleDetails = await installVersion({ name, version: distTagVersion });
             return { ...moduleDetails, previousVersion };
         },
         period: period * 1000,
@@ -113,9 +117,9 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
     };
 }
 
-type NpmWatcher = {
+type NpmWatcher<T : Object> = {
     get : (tag? : string) => Promise<ModuleDetails>,
-    import : <T: Object>() => Promise<T>,
+    import : () => Promise<T>,
     cancel : () => void,
     markStable : (string) => void,
     markUnstable : (string) => void
@@ -128,7 +132,7 @@ type NPMPollOptions = {
     period? : number
 };
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20 } : NPMPollOptions) : NpmWatcher {
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20 } : NPMPollOptions) : NpmWatcher<Object> {
 
     let pollers = {};
 
