@@ -119,7 +119,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
 
 type NpmWatcher<T : Object> = {
     get : (tag? : string) => Promise<ModuleDetails>,
-    import : () => Promise<T>,
+    import : (?string) => Promise<T>,
     cancel : () => void,
     markStable : (string) => void,
     markUnstable : (string) => void
@@ -158,10 +158,10 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20
         return await pollers[tag || DIST_TAG.LATEST].result();
     }
 
-    async function pollerImport <T : Object>() : T {
+    async function pollerImport <T : Object>(path = '') : T {
         let { modulePath } = await pollerGet();
         // $FlowFixMe
-        return require(modulePath); // eslint-disable-line security/detect-non-literal-require
+        return require(join(modulePath, path)); // eslint-disable-line security/detect-non-literal-require
     }
 
     function pollerCancel() {
