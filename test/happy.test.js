@@ -509,3 +509,89 @@ test(`Should install both release and latest versions if they are different`, as
         poller.cancel();
     });
 });
+
+test(`Should poll for a module and install it with custom npm options, and pass those options through to npm`, async () => {
+    await wrapPromise(async (reject) => {
+
+        const MODULE_NAME = 'grabthar-test-module';
+        const MODULE_VERSION = '1.3.53';
+        const MODULE_DEPENDENCIES = {
+            foo: '1.2.3',
+            bar: '56.0.3',
+            baz: '6.12.99'
+        };
+
+        const REGISTRY = 'https://npm.foobar.com';
+
+        let pkg = {
+            'version':   MODULE_VERSION,
+            'dist-tags': {
+                'latest': MODULE_VERSION
+            },
+            'versions':     [ MODULE_VERSION ],
+            'dependencies': MODULE_DEPENDENCIES
+        };
+
+        let exec = mockExec();
+
+        let poller = poll({
+            name:       MODULE_NAME,
+            onError:    reject,
+            npmOptions: {
+                registry: REGISTRY
+            }
+        });
+
+        let next = await exec.next();
+        checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
+
+        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
+            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        }
+
+        await next.res(JSON.stringify(pkg));
+
+        next = await exec.next();
+        checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
+
+        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
+            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        }
+
+        let { prefix } = next.cmd.opts;
+
+        if (!prefix) {
+            throw new Error(`Expected npm install to pass prefix`);
+        }
+
+        await next.res(JSON.stringify({}));
+
+        let pollerPromise = poller.get();
+
+        next = await exec.next();
+        checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
+
+        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
+            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        }
+
+        await next.res(JSON.stringify(pkg));
+
+        let { rootPath, version, dependencies } = await pollerPromise;
+
+        if (rootPath !== prefix) {
+            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
+        }
+
+        if (version !== MODULE_VERSION) {
+            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
+        }
+
+        if (JSON.stringify(dependencies) !== JSON.stringify(MODULE_DEPENDENCIES)) {
+            throw new Error(`Expected dependencies to match up: ${ JSON.stringify(dependencies) } vs ${ JSON.stringify(MODULE_DEPENDENCIES) }`);
+        }
+
+        exec.cancel();
+        poller.cancel();
+    });
+});

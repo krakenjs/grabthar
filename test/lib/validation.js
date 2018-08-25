@@ -1,8 +1,10 @@
 /* @flow */
 
+import { NPM_REGISTRY } from '../../src/config';
+
 import type { MockCmd } from './mocks';
 
-export function checkNpmOptions(cmd : MockCmd) {
+export function checkNpmOptions(cmd : MockCmd, { expectedRegistry = NPM_REGISTRY } : { expectedRegistry : string } = {}) {
     let { args, opts } = cmd;
     let [ command ] = args;
     let { silent, json, production, cache, registry } = opts;
@@ -27,7 +29,7 @@ export function checkNpmOptions(cmd : MockCmd) {
         throw new Error(`Expected npm to be passed --cache option`);
     }
 
-    if (!registry) {
-        throw new Error(`Expected npm to be passed --registry option`);
+    if (!registry || registry !== expectedRegistry) {
+        throw new Error(`Expected npm to be passed --registry option with value of ${ expectedRegistry }, got ${ registry }`);
     }
 }

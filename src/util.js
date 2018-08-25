@@ -186,3 +186,22 @@ export async function npmRun(command : string, options : Object) : Promise<strin
         });
     });
 }
+
+export function stringifyCommandLineOptions(options : { [string] : string | boolean }) : string {
+    let result = [];
+    for (let key of Object.keys(options)) {
+        let value = options[key];
+        let token = `--${ key }`;
+
+        if (typeof value === 'boolean') {
+            if (value === true) {
+                result.push(token);
+            } else if (value === false) {
+                continue;
+            }
+        } else if (typeof value === 'string') {
+            result.push(`${ token }=${ JSON.stringify(value) }`);
+        }
+    }
+    return result.join(' ');
+}

@@ -4,20 +4,25 @@ import compareVersions from 'compare-versions';
 
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { DIST_TAGS, NPM, DIST_TAG } from './constants';
-import { memoize, memoizePromise, npmRun } from './util';
+import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
-const DEFAULT_NPM_OPTIONS = [
-    `--silent`,
-    `--json`,
-    `--production`,
-    `--cache="${ NPM_CACHE_DIR }"`,
-    `--registry="${ NPM_REGISTRY }"`
-].join(' ');
+export type NpmOptionsType = {
+    [string] : string | boolean
+};
 
-export async function npm(command : string, args : Array<string> = []) : Promise<Object> {
-    let cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ DEFAULT_NPM_OPTIONS }`;
+const DEFAULT_NPM_OPTIONS = {
+    silent:     true,
+    json:       true,
+    production: true,
+    cache:      NPM_CACHE_DIR,
+    registry:   NPM_REGISTRY
+};
+
+export async function npm(command : string, args : Array<string> = [], npmOptions : ?NpmOptionsType = {}) : Promise<Object> {
+    npmOptions = Object.assign({}, DEFAULT_NPM_OPTIONS, npmOptions);
+    let cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
     let cmdoptions = {
         timeout: NPM_TIMEOUT,
         env:     process.env
@@ -40,23 +45,20 @@ type Package = {
     }
 };
 
-export let getRemotePackage = memoizePromise(async (name : string, version? : string) : Promise<Package> => {
-    if (version) {
-        name = `${ name }@${ version }`;
-    }
-    return await npm('info', [ name ]);
+export let getRemotePackage = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
+    return await npm('info', [ name ], npmOptions);
 });
 
-export let getModuleDependencies = memoize(async (name : string, version : string) : { [string] : string } => {
-    let pkg = await getRemotePackage(name, version);
+export let getModuleDependencies = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : { [string] : string } => {
+    let pkg = await getRemotePackage(`${ name }@${ version }`, npmOptions);
     if (!pkg.dependencies) {
         throw new Error(`Could not get dependencies for ${ name }`);
     }
     return pkg.dependencies;
 });
 
-export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : string, tag : string) : Promise<string> => {
-    let pkg = await getRemotePackage(moduleName);
+export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : string, tag : string, npmOptions : ?NpmOptionsType = {}) : Promise<string> => {
+    let pkg = await getRemotePackage(moduleName, npmOptions);
     let version = pkg[DIST_TAGS] && pkg[DIST_TAGS][tag];
     if (!version) {
         if (tag === DIST_TAG.LATEST && pkg.version) {
@@ -68,8 +70,8 @@ export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : s
     return version;
 });
 
-export let getRemoteModuleVersions = memoizePromise(async (moduleName : string) : Promise<Array<string>> => {
-    let pkg = await getRemotePackage(moduleName);
+export let getRemoteModuleVersions = memoizePromise(async (moduleName : string, npmOptions : ?NpmOptionsType = {}) : Promise<Array<string>> => {
+    let pkg = await getRemotePackage(moduleName, npmOptions);
     if (!pkg.versions) {
         throw new Error(`Could not get versions for ${ moduleName }`);
     }
@@ -80,6 +82,6 @@ export let getRemoteModuleVersions = memoizePromise(async (moduleName : string) 
 });
 
 
-export let install = memoize(async (name : string, version : string, dir : string) : Promise<Object> => {
-    return await npm('install', [ `${ name }@${ version }`, '--prefix', dir ]);
+export let install = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : Promise<Object> => {
+    return await npm('install', [ `${ name }@${ version }` ], npmOptions);
 });

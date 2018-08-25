@@ -4,7 +4,7 @@ import { join } from 'path';
 
 import compareVersions from 'compare-versions';
 
-import { install, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions } from './npm';
+import { install, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions, type NpmOptionsType } from './npm';
 import { poll, createHomeDirectory, memoize } from './util';
 import { MODULE_ROOT_NAME } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY } from './constants';
@@ -17,11 +17,11 @@ type ModuleDetails = {
     dependencies : { [string] : string }
 };
 
-async function installVersion({ name, version }) : Promise<ModuleDetails> {
+async function installVersion({ name, version, npmOptions = {} } : { name : string, version : string, npmOptions : NpmOptionsType }) : Promise<ModuleDetails> {
     let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name }_${ version }`);
 
-    let installPromise = install(name, version, newRoot);
-    let dependenciesPromise = getModuleDependencies(name, version);
+    let installPromise = install(name, version, { ...npmOptions, prefix: newRoot });
+    let dependenciesPromise = getModuleDependencies(name, version, npmOptions);
 
     await installPromise;
 
@@ -44,15 +44,15 @@ function getMajorVersion(version : string) : string {
     return version.split('.')[0];
 }
 
-function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : string, tag : string, onError : (Error) => void, period? : number }) : DistPoller<ModuleDetails> {
+function pollInstallDistTag({ name, onError, tag, period = 20, npmOptions = {} } : { name : string, tag : string, onError : (Error) => void, period? : number, npmOptions : NpmOptionsType }) : DistPoller<ModuleDetails> {
     
     let stability : { [string] : string } = {};
 
     let poller = poll({
         handler: async () => {
             let [ distTagVersion, allVersions ] = await Promise.all([
-                getRemotePackageDistTagVersion(name, tag),
-                getRemoteModuleVersions(name)
+                getRemotePackageDistTagVersion(name, tag, npmOptions),
+                getRemoteModuleVersions(name, npmOptions)
             ]);
 
             stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
@@ -98,7 +98,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20 } : { name : strin
                 distTagVersion = previousVersion;
             }
 
-            let moduleDetails = await installVersion({ name, version: distTagVersion });
+            let moduleDetails = await installVersion({ name, version: distTagVersion, npmOptions });
             return { ...moduleDetails, previousVersion };
         },
         period: period * 1000,
@@ -129,15 +129,16 @@ type NPMPollOptions = {
     name : string,
     tags? : Array<string>,
     onError : (Error) => void,
-    period? : number
+    period? : number,
+    npmOptions? : NpmOptionsType
 };
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20 } : NPMPollOptions) : NpmWatcher<Object> {
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20, npmOptions = {} } : NPMPollOptions) : NpmWatcher<Object> {
 
     let pollers = {};
 
     for (let tag of tags) {
-        pollers[tag] = pollInstallDistTag({ name, tag, onError, period });
+        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, npmOptions });
     }
 
     async function pollerGet(tag? : string) : Promise<ModuleDetails> {
