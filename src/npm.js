@@ -2,12 +2,12 @@
 
 import { join } from 'path';
 
-import { mkdir, exists } from 'fs-extra';
+import { mkdir, exists, move } from 'fs-extra';
 import compareVersions from 'compare-versions';
 import download from 'download';
 
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
-import { DIST_TAGS, NPM, DIST_TAG, NODE_MODULES } from './constants';
+import { DIST_TAGS, NPM, DIST_TAG, NODE_MODULES, PACKAGE } from './constants';
 import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
@@ -103,12 +103,21 @@ export let installFlat = memoize(async (name : string, version : string, npmOpti
     }
 
     let nodeModulesDir = join(prefix, NODE_MODULES);
+    let packageName = `${ PACKAGE }.tar.gz`;
+    let packageDir = join(nodeModulesDir, PACKAGE);
+    let moduleDir = join(nodeModulesDir, name);
 
-    if (!exists(nodeModulesDir)) {
+    if (await exists(moduleDir)) {
+        return;
+    }
+
+    if (!await exists(nodeModulesDir)) {
         await mkdir(nodeModulesDir);
     }
     
-    await download(tarball, nodeModulesDir, { decompress: true });
+    await download(tarball, nodeModulesDir, { extract: true, filename: packageName });
+
+    await move(packageDir, moduleDir);
 });
 
 
