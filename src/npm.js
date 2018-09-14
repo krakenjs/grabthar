@@ -1,15 +1,20 @@
 /* @flow */
 
+import { join } from 'path';
+
+import { mkdir, exists } from 'fs-extra';
 import compareVersions from 'compare-versions';
+import download from 'download';
 
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
-import { DIST_TAGS, NPM, DIST_TAG } from './constants';
+import { DIST_TAGS, NPM, DIST_TAG, NODE_MODULES } from './constants';
 import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
 export type NpmOptionsType = {
-    [string] : string | boolean
+    prefix? : string,
+    registry? : string
 };
 
 const DEFAULT_NPM_OPTIONS = {
@@ -42,15 +47,18 @@ type Package = {
     'dist-tags' : {
         release? : string,
         latest? : string
+    },
+    'dist' : {
+        tarball : string
     }
 };
 
-export let getRemotePackage = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
+export let info = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
     return await npm('info', [ name ], npmOptions);
 });
 
 export let getModuleDependencies = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : { [string] : string } => {
-    let pkg = await getRemotePackage(`${ name }@${ version }`, npmOptions);
+    let pkg = await info(`${ name }@${ version }`, npmOptions);
     if (!pkg.dependencies) {
         throw new Error(`Could not get dependencies for ${ name }`);
     }
@@ -58,7 +66,7 @@ export let getModuleDependencies = memoize(async (name : string, version : strin
 });
 
 export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : string, tag : string, npmOptions : ?NpmOptionsType = {}) : Promise<string> => {
-    let pkg = await getRemotePackage(moduleName, npmOptions);
+    let pkg = await info(moduleName, npmOptions);
     let version = pkg[DIST_TAGS] && pkg[DIST_TAGS][tag];
     if (!version) {
         if (tag === DIST_TAG.LATEST && pkg.version) {
@@ -71,7 +79,7 @@ export let getRemotePackageDistTagVersion = memoizePromise(async (moduleName : s
 });
 
 export let getRemoteModuleVersions = memoizePromise(async (moduleName : string, npmOptions : ?NpmOptionsType = {}) : Promise<Array<string>> => {
-    let pkg = await getRemotePackage(moduleName, npmOptions);
+    let pkg = await info(moduleName, npmOptions);
     if (!pkg.versions) {
         throw new Error(`Could not get versions for ${ moduleName }`);
     }
@@ -81,7 +89,29 @@ export let getRemoteModuleVersions = memoizePromise(async (moduleName : string, 
         .reverse();
 });
 
+export let installFlat = memoize(async (name : string, version : string, npmOptions? : NpmOptionsType = {}) : Promise<void> => {
+    let pkg = await info(name, npmOptions);
+    let tarball = pkg.dist && pkg.dist.tarball;
+    let prefix = npmOptions.prefix;
 
-export let install = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : Promise<Object> => {
-    return await npm('install', [ `${ name }@${ version }` ], npmOptions);
+    if (!prefix) {
+        throw new Error(`Prefix required for flat install`);
+    }
+
+    if (!tarball) {
+        throw new Error(`Can not find tarball for ${ name }`);
+    }
+
+    let nodeModulesDir = join(prefix, NODE_MODULES);
+
+    if (!exists(nodeModulesDir)) {
+        await mkdir(nodeModulesDir);
+    }
+    
+    await download(tarball, nodeModulesDir, { decompress: true });
+});
+
+
+export let install = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : Promise<void> => {
+    await npm('install', [ `${ name }@${ version }` ], npmOptions);
 });
