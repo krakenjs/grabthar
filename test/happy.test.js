@@ -81,8 +81,20 @@ test(`Should poll for a module and install it, then return the correct latest ve
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        if (JSON.stringify(dependencies) !== JSON.stringify(MODULE_DEPENDENCIES)) {
-            throw new Error(`Expected dependencies to match up: ${ JSON.stringify(dependencies) } vs ${ JSON.stringify(MODULE_DEPENDENCIES) }`);
+        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        let actualDependencyNumbber = Object.keys(dependencies).length;
+
+        if (expectedDependencyNumber !== actualDependencyNumbber) {
+            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
+        }
+
+        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            let actualVersion = dependencies[dependencyName].version;
+
+            if (expectedVersion !== actualVersion) {
+                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
+            }
         }
 
         exec.cancel();
@@ -163,8 +175,20 @@ test(`Should poll for a module and install it, then explicitly return the correc
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        if (JSON.stringify(dependencies) !== JSON.stringify(MODULE_DEPENDENCIES)) {
-            throw new Error(`Expected dependencies to match up: ${ JSON.stringify(dependencies) } vs ${ JSON.stringify(MODULE_DEPENDENCIES) }`);
+        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        let actualDependencyNumbber = Object.keys(dependencies).length;
+
+        if (expectedDependencyNumber !== actualDependencyNumbber) {
+            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
+        }
+
+        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            let actualVersion = dependencies[dependencyName].version;
+
+            if (expectedVersion !== actualVersion) {
+                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
+            }
         }
 
         exec.cancel();
@@ -245,8 +269,20 @@ test(`Should poll for a module and install it, then return the correct release v
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        if (JSON.stringify(dependencies) !== JSON.stringify(MODULE_DEPENDENCIES)) {
-            throw new Error(`Expected dependencies to match up: ${ JSON.stringify(dependencies) } vs ${ JSON.stringify(MODULE_DEPENDENCIES) }`);
+        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        let actualDependencyNumbber = Object.keys(dependencies).length;
+
+        if (expectedDependencyNumber !== actualDependencyNumbber) {
+            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
+        }
+
+        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            let actualVersion = dependencies[dependencyName].version;
+
+            if (expectedVersion !== actualVersion) {
+                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
+            }
         }
 
         exec.cancel();
@@ -327,8 +363,20 @@ test(`Should poll for a module and install it, then explicitly return the correc
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        if (JSON.stringify(dependencies) !== JSON.stringify(MODULE_DEPENDENCIES)) {
-            throw new Error(`Expected dependencies to match up: ${ JSON.stringify(dependencies) } vs ${ JSON.stringify(MODULE_DEPENDENCIES) }`);
+        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        let actualDependencyNumbber = Object.keys(dependencies).length;
+
+        if (expectedDependencyNumber !== actualDependencyNumbber) {
+            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
+        }
+
+        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            let actualVersion = dependencies[dependencyName].version;
+
+            if (expectedVersion !== actualVersion) {
+                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
+            }
         }
 
         exec.cancel();
@@ -587,8 +635,20 @@ test(`Should poll for a module and install it with custom npm options, and pass 
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        if (JSON.stringify(dependencies) !== JSON.stringify(MODULE_DEPENDENCIES)) {
-            throw new Error(`Expected dependencies to match up: ${ JSON.stringify(dependencies) } vs ${ JSON.stringify(MODULE_DEPENDENCIES) }`);
+        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        let actualDependencyNumbber = Object.keys(dependencies).length;
+
+        if (expectedDependencyNumber !== actualDependencyNumbber) {
+            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
+        }
+
+        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            let actualVersion = dependencies[dependencyName].version;
+
+            if (expectedVersion !== actualVersion) {
+                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
+            }
         }
 
         exec.cancel();

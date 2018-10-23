@@ -14,7 +14,12 @@ type ModuleDetails = {
     nodeModulesPath : string,
     modulePath : string,
     version : string,
-    dependencies : { [string] : string }
+    dependencies : {
+        [string] : {
+            version : string,
+            path : string
+        }
+    }
 };
 
 async function installVersion({ name, version, flat = false, npmOptions = {} } : { name : string, version : string, flat? : boolean, npmOptions : NpmOptionsType }) : Promise<ModuleDetails> {
@@ -31,7 +36,14 @@ async function installVersion({ name, version, flat = false, npmOptions = {} } :
     let rootPath = newRoot;
     let nodeModulesPath = join(rootPath, NODE_MODULES);
     let modulePath = join(nodeModulesPath, name);
-    let dependencies = await dependenciesPromise;
+    let dependencyVersions = await dependenciesPromise;
+    let dependencies = {};
+    for (let dependencyName of Object.keys(dependencyVersions)) {
+        dependencies[dependencyName] = {
+            version: dependencyVersions[dependencyName],
+            path:    join(nodeModulesPath, dependencyName)
+        };
+    }
 
     return { rootPath, nodeModulesPath, modulePath, version, dependencies };
 }
