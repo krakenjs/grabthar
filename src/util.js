@@ -177,6 +177,20 @@ export async function npmRun(command : string, options : Object) : Promise<strin
     return await new Promise((resolve, reject) => {
         exec(command, options, (err, stdout, stderr) => {
             if (err) {
+                if (stdout) {
+                    let json;
+                    try {
+                        json = JSON.parse(stdout);
+                    } catch (err2) { // eslint-disable-line unicorn/catch-error-name
+                        return reject(err);
+                    }
+                    if (json && json.error) {
+                        let { code, summary, detail } = json.error;
+                        return reject(new Error(`${ code } ${ summary }\n\n${ detail }`));
+                    }
+                    return reject(err);
+                }
+
                 return reject(err);
             }
 
