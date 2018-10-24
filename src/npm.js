@@ -8,7 +8,7 @@ import download from 'download';
 
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { DIST_TAGS, NPM, DIST_TAG, NODE_MODULES, PACKAGE } from './constants';
-import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions } from './util';
+import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -17,7 +17,7 @@ export type NpmOptionsType = {
     registry? : string
 };
 
-const DEFAULT_NPM_OPTIONS = {
+const DEFAULT_NPM_OPTIONS : NpmOptionsType = {
     silent:     true,
     json:       true,
     production: true,
@@ -27,8 +27,16 @@ const DEFAULT_NPM_OPTIONS = {
 
 export async function npm(command : string, args : Array<string> = [], npmOptions : ?NpmOptionsType = {}) : Promise<Object> {
     npmOptions = Object.assign({}, DEFAULT_NPM_OPTIONS, npmOptions);
+
+    if (!npmOptions.registry) {
+        throw new Error(`Expected npm registry to be passed`);
+    }
+
+    await lookupDNS(npmOptions.registry);
+
     let cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
-    let cmdoptions = {
+
+    let cmdoptions : NpmOptionsType = {
         timeout: NPM_TIMEOUT,
         env:     process.env
     };

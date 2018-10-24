@@ -569,7 +569,7 @@ test(`Should poll for a module and install it with custom npm options, and pass 
             baz: '6.12.99'
         };
 
-        const REGISTRY = 'https://npm.foobar.com';
+        const REGISTRY = 'https://www.paypal.com';
 
         let pkg = {
             'version':   MODULE_VERSION,

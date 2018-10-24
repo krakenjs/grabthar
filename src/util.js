@@ -2,6 +2,7 @@
 
 import { join } from 'path';
 import { homedir } from 'os';
+import { lookup } from 'dns';
 
 import { mkdir, exists } from 'fs-extra';
 import { exec } from 'npm-run';
@@ -221,3 +222,17 @@ export function stringifyCommandLineOptions(options : { [string] : string | bool
     }
     return result.join(' ');
 }
+
+// $FlowFixMe
+export const lookupDNS = memoizePromise(async (domain : string) : Promise<string> => {
+    return await new Promise((resolve, reject) => {
+        domain = domain.replace(/^https?:\/\//, '');
+        lookup(domain, (err : Error, res : string) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(res);
+            }
+        });
+    });
+});
