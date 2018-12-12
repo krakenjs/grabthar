@@ -23,7 +23,7 @@ type ModuleDetails = {
 };
 
 async function installVersion({ name, version, flat = false, npmOptions = {} } : { name : string, version : string, flat? : boolean, npmOptions : NpmOptionsType }) : Promise<ModuleDetails> {
-    let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name.replace(/@/g, '-') }_${ version }`);
+    let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name.replace(/\//g, '-') }_${ version }`);
 
     let installPromise = flat
         ? installFlat(name, version, { ...npmOptions, prefix: newRoot })
