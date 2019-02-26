@@ -5,6 +5,7 @@ import { join } from 'path';
 import { mkdir, exists, move } from 'fs-extra';
 import compareVersions from 'compare-versions';
 import download from 'download';
+import fetch from 'node-fetch';
 
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { DIST_TAGS, NPM, DIST_TAG, NODE_MODULES, PACKAGE } from './constants';
@@ -25,6 +26,15 @@ const DEFAULT_NPM_OPTIONS : NpmOptionsType = {
     registry:   NPM_REGISTRY
 };
 
+const verifyRegistry = memoizePromise(async (domain : string) : Promise<void> => {
+    await lookupDNS(domain);
+    const res = await fetch(`${ domain }/info`);
+    if (res.status !== 200) {
+        throw new Error(`Got ${ res.status } from ${ domain }/info`);
+    }
+});
+
+
 export async function npm(command : string, args : Array<string> = [], npmOptions : ?NpmOptionsType = {}) : Promise<Object> {
     npmOptions = Object.assign({}, DEFAULT_NPM_OPTIONS, npmOptions);
 
@@ -32,7 +42,7 @@ export async function npm(command : string, args : Array<string> = [], npmOption
         throw new Error(`Expected npm registry to be passed`);
     }
 
-    await lookupDNS(npmOptions.registry);
+    await verifyRegistry(npmOptions.registry);
 
     let cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
 

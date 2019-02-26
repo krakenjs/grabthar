@@ -39,8 +39,9 @@
     "compare-versions": "^3.1.0",
     "download": "^7.1.0",
     "fs-extra": "^7.0.0",
+    "node-fetch": "^2.3.0",
     "npm": "^6",
-    "npm-run": "^4.1.2",
+    "npm-run": "^5",
     "uuid": "^3.2.1"
   }
 }

@@ -34,6 +34,8 @@ type MockExec = {
     cancel : () => void
 };
 
+const MOCK_EXEC_TIMEOUT = 5 * 1000;
+
 export function mockExec() : MockExec {
     let buffer : Array<MockExecNext> = [];
     let nextResolve;
@@ -71,8 +73,8 @@ export function mockExec() : MockExec {
             }
             return new Promise((resolve, reject) => {
                 nextResolve = resolve;
-                let err = new Error(`No new commands in 1000ms`);
-                setTimeout(() => reject(err), 1000);
+                let err = new Error(`No new commands in ${ MOCK_EXEC_TIMEOUT }ms`);
+                setTimeout(() => reject(err), MOCK_EXEC_TIMEOUT);
             });
         },
         cancel() {
