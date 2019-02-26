@@ -4,7 +4,7 @@
   "description": "Periodic npm installs in production",
   "main": "index.js",
   "scripts": {
-    "flow-typed": "flow-typed install",
+    "flow-typed": "rm -rf ./flow-typed && flow-typed install",
     "flow:build": "flow gen-flow-files ./src/index.js --out-dir ./src",
     "babel": "babel src/*.js src/**/*.js --exclude=node_modules --out-dir . --source-maps inline",
     "test": "npm run lint && npm run flow-typed && npm run flow && npm run jest",
