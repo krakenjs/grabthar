@@ -176,7 +176,15 @@ export function memoizePromise<R : mixed, A : Array<*>> (method : (...args: A) =
 
 export async function npmRun(command : string, options : Object) : Promise<string> {
     return await new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
         exec(command, options, (err, stdout, stderr) => {
+            const elapsedTime = (Date.now() - startTime);
+
+            if (stderr) {
+                return reject(new Error(stderr.toString()));
+            }
+
             if (err) {
                 if (stdout) {
                     let json;
@@ -192,11 +200,15 @@ export async function npmRun(command : string, options : Object) : Promise<strin
                     return reject(err);
                 }
 
-                return reject(err);
-            }
+                if (err.killed) {
+                    if (options.timeout && (options.timeout * 0.90) < (elapsedTime - options.timeout)) {
+                        throw new Error(`Command timed out after ${ options.timeout }ms: ${ command }`);
+                    }
 
-            if (stderr) {
-                return reject(new Error(stderr.toString()));
+                    throw new Error(`Command killed after ${ elapsedTime }ms: ${ command }`);
+                }
+
+                return reject(err);
             }
 
             return resolve(stdout.toString());
