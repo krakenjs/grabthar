@@ -201,11 +201,11 @@ export async function npmRun(command : string, options : Object) : Promise<strin
                 }
 
                 if (err.killed) {
-                    if (options.timeout && (options.timeout * 0.90) < (elapsedTime - options.timeout)) {
-                        throw new Error(`Command timed out after ${ options.timeout }ms: ${ command }`);
+                    if (options.timeout && (options.timeout < (elapsedTime - options.timeout))) {
+                        return reject(new Error(`Command timed out after ${ options.timeout }ms: ${ command }`));
                     }
 
-                    throw new Error(`Command killed after ${ elapsedTime }ms: ${ command }`);
+                    return reject(new Error(`Command killed after ${ elapsedTime }ms: ${ command }`));
                 }
 
                 return reject(err);
