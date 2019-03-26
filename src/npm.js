@@ -71,7 +71,9 @@ type Package = {
     }
 };
 
-async function fetchInfo(name : string, registry? : string = NPM_REGISTRY) : Promise<Package> {
+async function fetchInfo(packageRef : string, registry? : string = NPM_REGISTRY) : Promise<Package> {
+
+    let [ name, version ] = packageRef.split('@');
     const res = await fetch(`${ registry }/${ name }`);
 
     if (res.status !== 200) {
@@ -81,7 +83,7 @@ async function fetchInfo(name : string, registry? : string = NPM_REGISTRY) : Pro
     const result = await res.json();
 
     const distTags = result['dist-tags'];
-    const version = distTags && distTags.latest;
+    version = version || distTags.latest;
     const info = result.versions && result.versions[version];
     const dependencies = info && info.dependencies;
     const versions = Object.keys(result.versions || {});
