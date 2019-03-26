@@ -71,7 +71,31 @@ type Package = {
     }
 };
 
+async function fetchInfo(name : string, registry? : string = NPM_REGISTRY) : Promise<Package> {
+    const res = await fetch(`${ registry }/${ name }`);
+
+    if (res.status !== 200) {
+        throw new Error(`npm returned status ${ res.status || 'unknown' }`);
+    }
+
+    const result = await res.json();
+
+    if (!result.version || !result.dependencies || !result.versions || !result['dist-tags'] || !result.dist) {
+        throw new Error(`Missing info from fetched npm details`);
+    }
+
+    return result;
+}
+
 export let info = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
+    try {
+        if (process.env.NODE_ENV !== 'test') {
+            return await fetchInfo(name, npmOptions ? npmOptions.registry : NPM_REGISTRY);
+        }
+    } catch (err) {
+        // pass
+    }
+
     return await npm('info', [ name ], npmOptions, NPM_INFO_TIMEOUT);
 });
 
