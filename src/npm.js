@@ -80,11 +80,24 @@ async function fetchInfo(name : string, registry? : string = NPM_REGISTRY) : Pro
 
     const result = await res.json();
 
-    if (!result.version || !result.dependencies || !result.versions || !result['dist-tags'] || !result.dist) {
+    const distTags = result['dist-tags'];
+    const version = distTags && distTags.latest;
+    const info = result.versions && result.versions[version];
+    const dependencies = info && info.dependencies;
+    const versions = Object.keys(result.versions || {});
+    const dist = info && info.dist;
+
+    if (!distTags || !version || !info || !dependencies || !versions || !dist) {
         throw new Error(`Missing info from fetched npm details`);
     }
 
-    return result;
+    return {
+        version,
+        dependencies,
+        versions,
+        dist,
+        'dist-tags': distTags
+    };
 }
 
 export let info = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
