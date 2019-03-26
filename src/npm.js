@@ -7,7 +7,7 @@ import compareVersions from 'compare-versions';
 import download from 'download';
 import fetch from 'node-fetch';
 
-import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
+import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT, NPM_INFO_TIMEOUT } from './config';
 import { DIST_TAGS, NPM, DIST_TAG, NODE_MODULES, PACKAGE } from './constants';
 import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS } from './util';
 
@@ -35,7 +35,7 @@ const verifyRegistry = memoizePromise(async (domain : string) : Promise<void> =>
 });
 
 
-export async function npm(command : string, args : Array<string> = [], npmOptions : ?NpmOptionsType = {}) : Promise<Object> {
+export async function npm(command : string, args : Array<string> = [], npmOptions : ?NpmOptionsType = {}, timeout? : number = NPM_TIMEOUT) : Promise<Object> {
     npmOptions = Object.assign({}, DEFAULT_NPM_OPTIONS, npmOptions);
 
     if (!npmOptions.registry) {
@@ -47,8 +47,8 @@ export async function npm(command : string, args : Array<string> = [], npmOption
     let cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
 
     let cmdoptions : NpmOptionsType = {
-        timeout: NPM_TIMEOUT,
-        env:     process.env
+        timeout,
+        env: process.env
     };
     
     let result = await npmRun(cmdstring, cmdoptions);
@@ -72,7 +72,7 @@ type Package = {
 };
 
 export let info = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
-    return await npm('info', [ name ], npmOptions);
+    return await npm('info', [ name ], npmOptions, NPM_INFO_TIMEOUT);
 });
 
 export let getModuleDependencies = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : { [string] : string } => {
