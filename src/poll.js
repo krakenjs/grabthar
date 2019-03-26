@@ -6,7 +6,7 @@ import compareVersions from 'compare-versions';
 
 import { install, installFlat, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions, type NpmOptionsType } from './npm';
 import { poll, createHomeDirectory, memoize } from './util';
-import { MODULE_ROOT_NAME } from './config';
+import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY } from './constants';
 
 type ModuleDetails = {
@@ -64,6 +64,9 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
     
     let stability : { [string] : string } = {};
 
+    let installedVersion;
+    let moduleDetails;
+
     let poller = poll({
         handler: async () => {
             let [ distTagVersion, allVersions ] = await Promise.all([
@@ -114,7 +117,11 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
                 distTagVersion = previousVersion;
             }
 
-            let moduleDetails = await installVersion({ name, version: distTagVersion, flat, npmOptions });
+            if (installedVersion !== distTagVersion) {
+                moduleDetails = await installVersion({ name, version: distTagVersion, flat, npmOptions });
+                installedVersion = distTagVersion;
+            }
+            
             return { ...moduleDetails, previousVersion };
         },
         period: period * 1000,
@@ -150,7 +157,7 @@ type NPMPollOptions = {
     flat? : boolean
 };
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = 20, flat = false, npmOptions = {} } : NPMPollOptions) : NpmWatcher<Object> {
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, flat = false, npmOptions = {} } : NPMPollOptions) : NpmWatcher<Object> {
 
     let pollers = {};
 
