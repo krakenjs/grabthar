@@ -71,13 +71,11 @@ type Package = {
     }
 };
 
-async function fetchInfo(packageRef : string, registry? : string = NPM_REGISTRY) : Promise<Package> {
-
-    let [ name, version ] = packageRef.split('@');
+async function fetchInfo(name : string, registry? : string = NPM_REGISTRY, version? : string) : Promise<Package> {
     const res = await fetch(`${ registry }/${ name }`);
 
     if (res.status !== 200) {
-        throw new Error(`npm returned status ${ res.status || 'unknown' }`);
+        throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ name }`);
     }
 
     const result = await res.json();
@@ -102,20 +100,20 @@ async function fetchInfo(packageRef : string, registry? : string = NPM_REGISTRY)
     };
 }
 
-export let info = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}) : Promise<Package> => {
+export let info = memoizePromise(async (name : string, npmOptions : ?NpmOptionsType = {}, version? : string) : Promise<Package> => {
     try {
         if (process.env.NODE_ENV !== 'test') {
-            return await fetchInfo(name, npmOptions ? npmOptions.registry : NPM_REGISTRY);
+            return await fetchInfo(name, npmOptions ? npmOptions.registry : NPM_REGISTRY, version);
         }
     } catch (err) {
         // pass
     }
 
-    return await npm('info', [ name ], npmOptions, NPM_INFO_TIMEOUT);
+    return await npm('info', [ version ? `${ name }@${ version }` : name ], npmOptions, NPM_INFO_TIMEOUT);
 });
 
 export let getModuleDependencies = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : { [string] : string } => {
-    let pkg = await info(`${ name }@${ version }`, npmOptions);
+    let pkg = await info(name, npmOptions, version);
     if (!pkg.dependencies) {
         throw new Error(`Could not get dependencies for ${ name }`);
     }
