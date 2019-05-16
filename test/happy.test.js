@@ -71,11 +71,7 @@ test(`Should poll for a module and install it, then return the correct latest ve
 
         await next.res(JSON.stringify(pkg));
 
-        let { rootPath, version, dependencies } = await pollerPromise;
-
-        if (rootPath !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
-        }
+        let { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -165,11 +161,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify(pkg));
 
-        let { rootPath, version, dependencies } = await pollerPromise;
-
-        if (rootPath !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
-        }
+        let { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -259,11 +251,7 @@ test(`Should poll for a module and install it, then return the correct release v
 
         await next.res(JSON.stringify(pkg));
 
-        let { rootPath, version, dependencies } = await pollerPromise;
-
-        if (rootPath !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
-        }
+        let { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -353,11 +341,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify(pkg));
 
-        let { rootPath, version, dependencies } = await pollerPromise;
-
-        if (rootPath !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
-        }
+        let { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -625,11 +609,7 @@ test(`Should poll for a module and install it with custom npm options, and pass 
 
         await next.res(JSON.stringify(pkg));
 
-        let { rootPath, version, dependencies } = await pollerPromise;
-
-        if (rootPath !== prefix) {
-            throw new Error(`Expected npm install prefix '${ prefix }' to match moduleRoot '${ rootPath }'`);
-        }
+        let { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);

@@ -3,14 +3,14 @@
 import { join } from 'path';
 
 import compareVersions from 'compare-versions';
+import { readFile } from 'fs-extra';
 
 import { install, installFlat, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions, type NpmOptionsType } from './npm';
-import { poll, createHomeDirectory, memoize } from './util';
+import { poll, createHomeDirectory, memoize, resolveNodeModulesDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
-import { DIST_TAG, NODE_MODULES, STABILITY } from './constants';
+import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON } from './constants';
 
 type ModuleDetails = {
-    rootPath : string,
     nodeModulesPath : string,
     modulePath : string,
     version : string,
@@ -32,9 +32,8 @@ async function installVersion({ name, version, flat = false, npmOptions = {} } :
     let dependenciesPromise = getModuleDependencies(name, version, npmOptions);
 
     await installPromise;
-
-    let rootPath = newRoot;
-    let nodeModulesPath = join(rootPath, NODE_MODULES);
+    
+    let nodeModulesPath = join(newRoot, NODE_MODULES);
     let modulePath = join(nodeModulesPath, name);
     let dependencyVersions = await dependenciesPromise;
     let dependencies = {};
@@ -45,7 +44,7 @@ async function installVersion({ name, version, flat = false, npmOptions = {} } :
         };
     }
 
-    return { rootPath, nodeModulesPath, modulePath, version, dependencies };
+    return { nodeModulesPath, modulePath, version, dependencies };
 }
 
 type DistPoller<T> = {
@@ -154,10 +153,44 @@ type NPMPollOptions = {
     onError : (Error) => void,
     period? : number,
     npmOptions? : NpmOptionsType,
-    flat? : boolean
+    flat? : boolean,
+    fallback? : boolean
 };
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, flat = false, npmOptions = {} } : NPMPollOptions) : NpmWatcher<Object> {
+export function getFallback(name : string) : ModuleDetails {
+
+    const nodeModulesPath = resolveNodeModulesDirectory(name);
+
+    if (!nodeModulesPath) {
+        throw new Error(`Can not find node modules path for fallback for ${ name }`);
+    }
+
+    const modulePath = join(nodeModulesPath, name);
+    // $FlowFixMe
+    const pkg = require(join(modulePath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
+    const version = pkg.version;
+    let dependencies = {};
+
+    for (const dependencyName of Object.keys(pkg.dependencies || {})) {
+        const dependencyPath = join(nodeModulesPath, dependencyName);
+        // $FlowFixMe
+        const dependencyPkg = require(join(dependencyPath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
+
+        dependencies[dependencyName] = {
+            version: dependencyPkg.version,
+            path:    dependencyPath
+        };
+    }
+
+    return {
+        nodeModulesPath,
+        modulePath,
+        version,
+        dependencies
+    };
+}
+
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, flat = false, npmOptions = {}, fallback = true } : NPMPollOptions) : NpmWatcher<Object> {
 
     let pollers = {};
 
@@ -180,13 +213,30 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
             }
         }
 
-        return await pollers[tag || DIST_TAG.LATEST].result();
+        const poller = pollers[tag || DIST_TAG.LATEST];
+
+        try {
+            return await poller.result();
+        } catch (err) {
+            if (fallback && resolveNodeModulesDirectory(name)) {
+                return getFallback(name);
+            }
+
+            throw err;
+        }
     }
 
     async function pollerImport <T : Object>(path = '') : T {
         let { modulePath } = await pollerGet();
         // $FlowFixMe
         return require(join(modulePath, path)); // eslint-disable-line security/detect-non-literal-require
+    }
+
+    async function pollerRead(path? : string = '') : Promise<string> {
+        const { modulePath } = await pollerGet();
+        const filePath = join(modulePath, path);
+        const file = await readFile(filePath);
+        return file;
     }
 
     function pollerCancel() {
@@ -210,6 +260,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     return {
         get:          pollerGet,
         import:       pollerImport,
+        read:         pollerRead,
         cancel:       pollerCancel,
         markStable:   pollerMarkStable,
         markUnstable: pollerMarkUnstable

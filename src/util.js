@@ -7,6 +7,8 @@ import { lookup } from 'dns';
 import { mkdir, exists } from 'fs-extra';
 import { exec } from 'npm-run';
 
+import { NODE_MODULES, PACKAGE_JSON } from './constants';
+
 export async function makedir(dir : string) : Promise<void> {
     try {
         if (!await exists(dir)) {
@@ -248,3 +250,21 @@ export const lookupDNS = memoizePromise(async (domain : string) : Promise<string
         });
     });
 });
+
+export function resolveNodeModulesDirectory(name : string) : ?string {
+    let dir;
+
+    try {
+        dir = require.resolve(`${ name }/${ PACKAGE_JSON }`);
+    } catch (err) {
+        return;
+    }
+
+    const nodeModules = `/${ NODE_MODULES }/`;
+
+    if (dir.indexOf(nodeModules) === -1) {
+        return;
+    }
+
+    return `${ dir.split(nodeModules)[0] }${ nodeModules }`;
+}

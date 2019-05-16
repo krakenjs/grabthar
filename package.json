@@ -38,7 +38,7 @@
     "child-process-promise": "^2.2.1",
     "compare-versions": "^3.1.0",
     "download": "^7.1.0",
-    "fs-extra": "^7.0.0",
+    "fs-extra": "^7.0.1",
     "node-fetch": "^2.3.0",
     "npm": "^6",
     "npm-run": "^5",
