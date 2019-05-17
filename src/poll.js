@@ -5,10 +5,54 @@ import { join } from 'path';
 import compareVersions from 'compare-versions';
 import { readFile } from 'fs-extra';
 
-import { install, installFlat, getRemotePackageDistTagVersion, getModuleDependencies, getRemoteModuleVersions, type NpmOptionsType } from './npm';
+import { install, installFlat, type NpmOptionsType, info, type Package } from './npm';
 import { poll, createHomeDirectory, memoize, resolveNodeModulesDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
-import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON } from './constants';
+import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
+
+type InstallResult = {|
+    nodeModulesPath : string,
+    modulePath : string,
+    dependencies : {
+        [string] : {
+            version : string,
+            path : string
+        }
+    }
+|};
+
+function cleanName(name : string) : string {
+    return name.replace(/\//g, '-');
+}
+
+async function installVersion({ moduleInfo, version, flat = false, npmOptions = {} } : { moduleInfo : Package, version : string, flat? : boolean, npmOptions : NpmOptionsType }) : Promise<InstallResult> {
+    let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
+
+    if (flat) {
+        await installFlat(moduleInfo, version, { ...npmOptions, prefix: newRoot });
+    } else {
+        await install(moduleInfo.name, version, { ...npmOptions, prefix: newRoot });
+    }
+    
+    let nodeModulesPath = join(newRoot, NODE_MODULES);
+    let modulePath = join(nodeModulesPath, moduleInfo.name);
+    let dependencies = {};
+
+    let versionInfo = moduleInfo.versions[version];
+
+    for (let dependencyName of Object.keys(versionInfo.dependencies)) {
+        dependencies[dependencyName] = {
+            version: versionInfo.dependencies[dependencyName],
+            path:    join(nodeModulesPath, dependencyName)
+        };
+    }
+
+    return {
+        nodeModulesPath,
+        modulePath,
+        dependencies
+    };
+}
 
 type ModuleDetails = {
     nodeModulesPath : string,
@@ -22,33 +66,8 @@ type ModuleDetails = {
     }
 };
 
-async function installVersion({ name, version, flat = false, npmOptions = {} } : { name : string, version : string, flat? : boolean, npmOptions : NpmOptionsType }) : Promise<ModuleDetails> {
-    let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ name.replace(/\//g, '-') }_${ version }`);
-
-    let installPromise = flat
-        ? installFlat(name, version, { ...npmOptions, prefix: newRoot })
-        : install(name, version, { ...npmOptions, prefix: newRoot });
-
-    let dependenciesPromise = getModuleDependencies(name, version, npmOptions);
-
-    await installPromise;
-    
-    let nodeModulesPath = join(newRoot, NODE_MODULES);
-    let modulePath = join(nodeModulesPath, name);
-    let dependencyVersions = await dependenciesPromise;
-    let dependencies = {};
-    for (let dependencyName of Object.keys(dependencyVersions)) {
-        dependencies[dependencyName] = {
-            version: dependencyVersions[dependencyName],
-            path:    join(nodeModulesPath, dependencyName)
-        };
-    }
-
-    return { nodeModulesPath, modulePath, version, dependencies };
-}
-
-type DistPoller<T> = {
-    result : () => Promise<T>,
+type DistPoller = {
+    result : () => Promise<ModuleDetails>,
     stop : () => void,
     markStable : (string) => void,
     markUnstable : (string) => void
@@ -59,24 +78,26 @@ function getMajorVersion(version : string) : string {
 }
 
 function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npmOptions = {} } :
-    { name : string, tag : string, onError : (Error) => void, period? : number, flat? : boolean, npmOptions : NpmOptionsType }) : DistPoller<ModuleDetails> {
+    { name : string, tag : string, onError : ?(Error) => void, period? : number, flat? : boolean, npmOptions : NpmOptionsType }) : DistPoller {
     
     let stability : { [string] : string } = {};
 
-    let installedVersion;
-    let moduleDetails;
+    let installedModule;
 
     let poller = poll({
         handler: async () => {
-            let [ distTagVersion, allVersions ] = await Promise.all([
-                getRemotePackageDistTagVersion(name, tag, npmOptions),
-                getRemoteModuleVersions(name, npmOptions)
-            ]);
+            const moduleInfo = await info(name, npmOptions.registry);
+
+            let distTagVersion = moduleInfo[DIST_TAGS][tag];
+            const moduleVersions = Object.keys(moduleInfo.versions)
+                .filter(ver => ver.match(/^\d+\.\d+\.\d+$/))
+                .sort(compareVersions)
+                .reverse();
 
             stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
             let majorVersion = getMajorVersion(distTagVersion);
 
-            let eligibleVersions = allVersions.filter(ver => {
+            let eligibleVersions = moduleVersions.filter(ver => {
 
                 // Do not allow versions that are not the major version of the dist-tag
                 if (getMajorVersion(ver) !== majorVersion) {
@@ -97,7 +118,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
             });
 
             if (!eligibleVersions.length) {
-                throw new Error(`No eligible versions found for module ${ name } -- from [ ${ allVersions.join(', ') } ]`);
+                throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
             }
 
 
@@ -116,12 +137,20 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
                 distTagVersion = previousVersion;
             }
 
-            if (installedVersion !== distTagVersion) {
-                moduleDetails = await installVersion({ name, version: distTagVersion, flat, npmOptions });
-                installedVersion = distTagVersion;
+            if (!installedModule || installedModule.version !== distTagVersion) {
+                const version = distTagVersion;
+                const { nodeModulesPath, modulePath, dependencies } = await installVersion({ moduleInfo, version, flat, npmOptions });
+
+                installedModule = {
+                    nodeModulesPath,
+                    modulePath,
+                    version,
+                    previousVersion,
+                    dependencies
+                };
             }
-            
-            return { ...moduleDetails, previousVersion };
+
+            return installedModule;
         },
         period: period * 1000,
         onError
@@ -150,7 +179,7 @@ type NpmWatcher<T : Object> = {
 type NPMPollOptions = {
     name : string,
     tags? : Array<string>,
-    onError : (Error) => void,
+    onError? : (Error) => void,
     period? : number,
     npmOptions? : NpmOptionsType,
     flat? : boolean,

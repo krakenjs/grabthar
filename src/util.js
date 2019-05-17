@@ -63,7 +63,7 @@ export type Poller<T> = {
     result : () => Promise<T>
 };
 
-export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : { handler : () => Promise<T> | T, onError? : (Error) => void, period : number, multiplier? : number }) : Poller<T> {
+export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : { handler : () => Promise<T> | T, onError? : ?(Error) => void, period : number, multiplier? : number }) : Poller<T> {
 
     let interval = period;
     let running = false;

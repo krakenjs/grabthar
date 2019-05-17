@@ -1,12 +1,18 @@
 /* @flow */
 /* eslint import/order: 0, max-lines: 0 */
 
+import nock from 'nock';
+
 import { mockExec, checkNpmOptions, wrapPromise } from './lib';
 
 import { poll } from '../src';
 
 beforeEach(() => {
     poll.flushCache();
+
+    nock('https://registry.npmjs.org')
+        .get(`/info`)
+        .reply(200, {});
 });
 
 test(`Should poll for a module and install it, then return the correct latest version`, async () => {
@@ -20,32 +26,33 @@ test(`Should poll for a module and install it, then return the correct latest ve
             baz: '6.12.99'
         };
 
-        let pkg = {
-            'version':   MODULE_VERSION,
+        let info = {
+            'name':        MODULE_NAME,
             'dist-tags': {
-                'latest': MODULE_VERSION
+                latest:  MODULE_VERSION
             },
-            'versions':     [ MODULE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+            'versions': {
+                [ MODULE_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
         };
 
         let exec = mockExec();
+
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
 
         let poller = poll({
             name:    MODULE_NAME,
             onError: reject
         });
 
+        getReq.done();
+
         let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -60,18 +67,7 @@ test(`Should poll for a module and install it, then return the correct latest ve
 
         await next.res(JSON.stringify({}));
 
-        let pollerPromise = poller.get();
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version, dependencies } = await pollerPromise;
+        let { version, dependencies } = await poller.get();
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -109,33 +105,34 @@ test(`Should poll for a module and install it, then explicitly return the correc
             baz: '6.12.99'
         };
 
-        let pkg = {
-            'version':   MODULE_VERSION,
+        let info = {
+            'name':      MODULE_NAME,
             'dist-tags': {
-                'latest': MODULE_VERSION
+                latest: MODULE_VERSION
             },
-            'versions':     [ MODULE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
+
         };
 
         let exec = mockExec();
 
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
         let poller = poll({
             name:    MODULE_NAME,
-            tags:    [ 'latest' ],
             onError: reject
         });
 
+        getReq.done();
+
         let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -150,18 +147,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify({}));
 
-        let pollerPromise = poller.get('latest');
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version, dependencies } = await pollerPromise;
+        let { version, dependencies } = await poller.get('latest');
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -199,33 +185,34 @@ test(`Should poll for a module and install it, then return the correct release v
             baz: '6.12.99'
         };
 
-        let pkg = {
-            'version':   MODULE_VERSION,
+        let info = {
+            'name':      MODULE_NAME,
             'dist-tags': {
-                'release': MODULE_VERSION
+                latest: MODULE_VERSION
             },
-            'versions':     [ MODULE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
+
         };
 
         let exec = mockExec();
 
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
         let poller = poll({
             name:    MODULE_NAME,
-            tags:    [ 'release' ],
             onError: reject
         });
 
+        getReq.done();
+
         let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -240,18 +227,7 @@ test(`Should poll for a module and install it, then return the correct release v
 
         await next.res(JSON.stringify({}));
 
-        let pollerPromise = poller.get();
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version, dependencies } = await pollerPromise;
+        let { version, dependencies } = await poller.get();
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -289,33 +265,35 @@ test(`Should poll for a module and install it, then explicitly return the correc
             baz: '6.12.99'
         };
 
-        let pkg = {
-            'version':   MODULE_VERSION,
+        let info = {
+            'name':      MODULE_NAME,
             'dist-tags': {
-                'release': MODULE_VERSION
+                latest:  '1.3.57',
+                release: MODULE_VERSION
             },
-            'versions':     [ MODULE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
         };
 
         let exec = mockExec();
 
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
         let poller = poll({
-            name:    MODULE_NAME,
             tags:    [ 'release' ],
+            name:    MODULE_NAME,
             onError: reject
         });
 
+        getReq.done();
+
         let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -330,18 +308,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify({}));
 
-        let pollerPromise = poller.get('release');
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version, dependencies } = await pollerPromise;
+        let { version, dependencies } = await poller.get('release');
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -379,29 +346,33 @@ test(`Should use the base version if the latest version is not available`, async
             baz: '6.12.99'
         };
 
-        let pkg = {
-            'version':      MODULE_VERSION,
-            'versions':     [ MODULE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+        let info = {
+            'name':      MODULE_NAME,
+            'dist-tags': {
+                latest:  MODULE_VERSION
+            },
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
         };
 
         let exec = mockExec();
 
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
         let poller = poll({
             name:    MODULE_NAME,
-            onError: err => { reject(err); }
+            onError: reject
         });
 
+        getReq.done();
+
         let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -410,18 +381,7 @@ test(`Should use the base version if the latest version is not available`, async
 
         await next.res(JSON.stringify({}));
 
-        let pollerPromise = poller.get();
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        let { version } = await pollerPromise;
+        let { version } = await poller.get();
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -445,57 +405,54 @@ test(`Should install both release and latest versions if they are different`, as
             baz: '6.12.99'
         };
 
-        let pkg = {
-            'version':   LATEST_VERSION,
+
+        let info = {
+            'name':      MODULE_NAME,
             'dist-tags': {
                 'latest':  LATEST_VERSION,
                 'release': RELEASE_VERSION
             },
-            'versions':     [ LATEST_VERSION, RELEASE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+            'versions': {
+                [ LATEST_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                },
+                [ RELEASE_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
         };
 
         let exec = mockExec();
 
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
         let poller = poll({
+            tags:    [ 'latest', 'release' ],
             name:    MODULE_NAME,
-            tags:    [ 'release', 'latest' ],
-            onError: err => { reject(err); }
+            onError: reject
         });
 
-        let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
+        getReq.done();
 
         let releaseVersionInstalled = false;
         let latestVersionInstalled = false;
 
         for (let i = 0; i < 2; i += 1) {
-            next = await exec.next();
+            let next = await exec.next();
             checkNpmOptions(next.cmd);
 
             if (next.cmd.args[1] !== 'install') {
                 throw new Error(`Expected 'npm install ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
             }
 
+            await next.res(JSON.stringify({}));
+            
             if (next.cmd.args[2] === `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
                 releaseVersionInstalled = true;
-
-                await next.res(JSON.stringify({}));
-
-                next = await exec.next();
-                checkNpmOptions(next.cmd);
-
-                if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
-                    throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ RELEASE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-                }
-
-                await next.res(JSON.stringify(pkg));
 
                 let { version: releaseVersion } = await poller.get('release');
 
@@ -506,17 +463,6 @@ test(`Should install both release and latest versions if they are different`, as
 
             } else if (next.cmd.args[2] === `${ MODULE_NAME }@${ LATEST_VERSION }`) {
                 latestVersionInstalled = true;
-
-                await next.res(JSON.stringify({}));
-
-                next = await exec.next();
-                checkNpmOptions(next.cmd);
-
-                if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ LATEST_VERSION }`) {
-                    throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ LATEST_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-                }
-
-                await next.res(JSON.stringify(pkg));
 
                 let { version: latestVersion } = await poller.get('latest');
 
@@ -555,16 +501,28 @@ test(`Should poll for a module and install it with custom npm options, and pass 
 
         const REGISTRY = 'https://www.paypal.com';
 
-        let pkg = {
-            'version':   MODULE_VERSION,
+        let info = {
+            'name':      MODULE_NAME,
             'dist-tags': {
-                'latest': MODULE_VERSION
+                latest: MODULE_VERSION
             },
-            'versions':     [ MODULE_VERSION ],
-            'dependencies': MODULE_DEPENDENCIES
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {}
+                }
+            }
         };
 
         let exec = mockExec();
+
+        nock(REGISTRY)
+            .get(`/info`)
+            .reply(200, {});
+
+        const getReq = nock(REGISTRY)
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
 
         let poller = poll({
             name:       MODULE_NAME,
@@ -574,16 +532,9 @@ test(`Should poll for a module and install it with custom npm options, and pass 
             }
         });
 
+        getReq.done();
+
         let next = await exec.next();
-        checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
         checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -599,16 +550,7 @@ test(`Should poll for a module and install it with custom npm options, and pass 
         await next.res(JSON.stringify({}));
 
         let pollerPromise = poller.get();
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
+        
         let { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {

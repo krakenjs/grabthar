@@ -34,7 +34,7 @@ type MockExec = {
     cancel : () => void
 };
 
-const MOCK_EXEC_TIMEOUT = 5 * 1000;
+const MOCK_EXEC_TIMEOUT = 1000;
 
 export function mockExec() : MockExec {
     let buffer : Array<MockExecNext> = [];

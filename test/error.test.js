@@ -1,7 +1,9 @@
 /* @flow */
 /* eslint import/order: 0 */
 
-import { mockExec, checkNpmOptions, wrapPromise } from './lib';
+import nock from 'nock';
+
+import { mockExec, checkNpmOptions } from './lib';
 
 import { poll } from '../src';
 
@@ -9,32 +11,57 @@ beforeEach(() => {
     poll.flushCache();
 });
 
-test(`Should call the onError callback in the case of an error in npm info`, async () => {
-
-    let exec;
+test(`Should fail on get in the case of an error in npm info`, async () => {
     let poller;
     let error;
 
     try {
-        await wrapPromise(async (reject) => {
+        const MODULE_NAME = 'grabthar-test-module';
+
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(500);
+
+        poller = poll({
+            name:    MODULE_NAME
+        });
+
+        getReq.done();
+
+        await poller.get();
+
+    } catch (err) {
+        error = err;
+    }
+
+    if (!error) {
+        throw new Error(`Expected error to be thrown`);
+    }
+
+    // $FlowFixMe
+    poller.cancel();
+});
+
+test(`Should call the onError callback in the case of an error in npm info`, async () => {
+
+    let poller;
+    let error;
+
+    try {
+        await new Promise((resolve, reject) => {
 
             const MODULE_NAME = 'grabthar-test-module';
 
-            exec = mockExec();
+            const getReq = nock('https://registry.npmjs.org')
+                .get(`/${ MODULE_NAME }`)
+                .reply(500);
 
             poller = poll({
                 name:    MODULE_NAME,
-                onError:    err => { reject(err); }
+                onError: (err) => { reject(err); }
             });
 
-            let next = await exec.next();
-            checkNpmOptions(next.cmd);
-
-            if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-                throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-            }
-            
-            await next.err('Something went wrong');
+            getReq.done();
         });
         
     } catch (err) {
@@ -45,53 +72,103 @@ test(`Should call the onError callback in the case of an error in npm info`, asy
         throw new Error(`Expected error to be thrown`);
     }
 
-    if (error.message !== 'Something went wrong') {
-        throw error;
-    }
-
-    // $FlowFixMe
-    exec.cancel();
     // $FlowFixMe
     poller.cancel();
 });
 
-test(`Should call the onError callback in the case of an error in npm install`, async () => {
+test(`Should fail on get in the case of an error in npm install`, async () => {
 
-    let exec;
+    let exec = mockExec();
     let poller;
     let error;
 
     try {
-        await wrapPromise(async (reject) => {
+        const MODULE_NAME = 'grabthar-test-module';
+        const MODULE_VERSION = '4.0.4';
 
+        let info = {
+            'name':      MODULE_NAME,
+            'dist-tags': {
+                latest: MODULE_VERSION
+            },
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': {},
+                    'dist':         {}
+                }
+            }
+        };
+
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
+        poller = poll({
+            name: MODULE_NAME
+        });
+
+        getReq.done();
+
+        let next = await exec.next();
+        checkNpmOptions(next.cmd);
+
+        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
+            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        }
+
+        await next.err('Something went wrong');
+
+        await poller.get();
+
+    } catch (err) {
+        error = err;
+    }
+
+    if (!error) {
+        throw new Error(`Expected error to be thrown`);
+    }
+
+    // $FlowFixMe
+    poller.cancel();
+    exec.cancel();
+});
+
+test(`Should call the onError callback in the case of an error in npm install`, async () => {
+    
+    let exec = mockExec();
+    let poller;
+    let error;
+
+    try {
+        await new Promise(async (resolve, reject) => {
             const MODULE_NAME = 'grabthar-test-module';
-            const MODULE_VERSION = '1.3.53';
+            const MODULE_VERSION = '4.0.4';
 
-            let pkg = {
-                'version':   MODULE_VERSION,
-                'versions':  [ MODULE_VERSION ],
+            let info = {
+                'name':      MODULE_NAME,
                 'dist-tags': {
-                    'latest': MODULE_VERSION
+                    latest: MODULE_VERSION
+                },
+                'versions': {
+                    [ MODULE_VERSION ]: {
+                        'dependencies': {},
+                        'dist':         {}
+                    }
                 }
             };
 
-            exec = mockExec();
+            const getReq = nock('https://registry.npmjs.org')
+                .get(`/${ MODULE_NAME }`)
+                .reply(200, info);
 
             poller = poll({
                 name:    MODULE_NAME,
-                onError:    err => { reject(err); }
+                onError: reject
             });
 
+            getReq.done();
+
             let next = await exec.next();
-            checkNpmOptions(next.cmd);
-
-            if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-                throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-            }
-
-            await next.res(JSON.stringify(pkg));
-
-            next = await exec.next();
             checkNpmOptions(next.cmd);
 
             if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -109,178 +186,58 @@ test(`Should call the onError callback in the case of an error in npm install`, 
         throw new Error(`Expected error to be thrown`);
     }
 
-    if (error.message !== 'Something went wrong') {
-        throw error;
-    }
-
-    // $FlowFixMe
-    exec.cancel();
     // $FlowFixMe
     poller.cancel();
+    exec.cancel();
 });
 
 test(`Should fail when trying to get a module other than latest when tags not specified`, async () => {
-    await wrapPromise(async (reject) => {
+    let poller;
+    let error;
 
+    try {
         const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
+        const MODULE_VERSION = '4.0.4';
+        const RELEASE_VERSION = '5.0.5';
 
-        let pkg = {
-            'version':   MODULE_VERSION,
-            'versions':  [ MODULE_VERSION ],
+        let info = {
+            'name':      MODULE_NAME,
             'dist-tags': {
-                'latest': MODULE_VERSION
+                latest:  MODULE_VERSION,
+                release: RELEASE_VERSION
+            },
+            'versions': {
+                [MODULE_VERSION]: {
+                    'dependencies': {},
+                    'dist':         {}
+                },
+                [RELEASE_VERSION]: {
+                    'dependencies': {},
+                    'dist':         {}
+                }
             }
         };
 
-        let exec = mockExec();
+        const getReq = nock('https://registry.npmjs.org')
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
 
-        let poller = poll({
-            name:    MODULE_NAME,
-            onError: err => { reject(err); }
+        poller = poll({
+            name: MODULE_NAME
         });
 
-        let next = await exec.next();
-        checkNpmOptions(next.cmd);
+        getReq.done();
 
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
+        await poller.get('release');
 
-        await next.res(JSON.stringify(pkg));
+    } catch (err) {
+        error = err;
+    }
 
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
+    if (!error) {
+        throw new Error(`Expected error to be thrown`);
+    }
 
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        let error;
-
-        try {
-            await poller.get('foo');
-        } catch (err) {
-            error = err;
-        }
-
-        if (!error) {
-            throw new Error(`Expected error to be thrown`);
-        }
-
-        exec.cancel();
-        poller.cancel();
-    });
-});
-
-test(`Should fail when trying to get a module not specified in tags`, async () => {
-    await wrapPromise(async (reject) => {
-
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
-
-        let pkg = {
-            'version':   MODULE_VERSION,
-            'versions':  [ MODULE_VERSION ],
-            'dist-tags': {
-                'release': MODULE_VERSION,
-                'foo':     MODULE_VERSION
-            }
-        };
-
-        let exec = mockExec();
-
-        let poller = poll({
-            name:    MODULE_NAME,
-            tags:    [ 'release', 'foo' ],
-            onError: err => { reject(err); }
-        });
-
-        let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        let error;
-
-        try {
-            await poller.get('bar');
-        } catch (err) {
-            error = err;
-        }
-
-        if (!error) {
-            throw new Error(`Expected error to be thrown`);
-        }
-
-        exec.cancel();
-        poller.cancel();
-    });
-});
-
-test(`Should fail when trying to get latest module not specified in tags`, async () => {
-    await wrapPromise(async (reject) => {
-
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
-
-        let pkg = {
-            'version':   MODULE_VERSION,
-            'versions':  [ MODULE_VERSION ],
-            'dist-tags': {
-                'release': MODULE_VERSION,
-                'foo':     MODULE_VERSION
-            }
-        };
-
-        let exec = mockExec();
-
-        let poller = poll({
-            name:    MODULE_NAME,
-            tags:    [ 'release', 'foo' ],
-            onError: err => { reject(err); }
-        });
-
-        let next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'info' || next.cmd.args[2] !== MODULE_NAME) {
-            throw new Error(`Expected 'npm info ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify(pkg));
-
-        next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        let error;
-
-        try {
-            await poller.get('latest');
-        } catch (err) {
-            error = err;
-        }
-
-        if (!error) {
-            throw new Error(`Expected error to be thrown`);
-        }
-
-        exec.cancel();
-        poller.cancel();
-    });
+    // $FlowFixMe
+    poller.cancel();
 });
