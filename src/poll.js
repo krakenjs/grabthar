@@ -201,7 +201,7 @@ export function getFallback(name : string) : ModuleDetails {
     let dependencies = {};
 
     for (const dependencyName of Object.keys(pkg.dependencies || {})) {
-        const dependencyPath = join(nodeModulesPath, dependencyName);
+        const dependencyPath = resolveNodeModulesDirectory(dependencyName, [ modulePath ]);
         // $FlowFixMe
         const dependencyPkg = require(join(dependencyPath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
 

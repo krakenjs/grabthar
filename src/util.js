@@ -251,11 +251,12 @@ export const lookupDNS = memoizePromise(async (domain : string) : Promise<string
     });
 });
 
-export function resolveNodeModulesDirectory(name : string) : ?string {
+export function resolveNodeModulesDirectory(name : string, paths? : $ReadOnlyArray<string>) : ?string {
     let dir;
 
     try {
-        dir = require.resolve(`${ name }/${ PACKAGE_JSON }`);
+        // $FlowFixMe
+        dir = require.resolve(`${ name }/${ PACKAGE_JSON }`, { paths });
     } catch (err) {
         return;
     }
