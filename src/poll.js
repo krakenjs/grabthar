@@ -6,7 +6,7 @@ import compareVersions from 'compare-versions';
 import { readFile } from 'fs-extra';
 
 import { install, installFlat, type NpmOptionsType, info, type Package } from './npm';
-import { poll, createHomeDirectory, memoize, resolveNodeModulesDirectory } from './util';
+import { poll, createHomeDirectory, memoize, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
 
@@ -186,22 +186,25 @@ type NPMPollOptions = {
     fallback? : boolean
 };
 
-export function getFallback(name : string) : ModuleDetails {
+export async function getFallback(name : string) : Promise<ModuleDetails> {
+    const modulePath = resolveModuleDirectory(name);
+    const nodeModulesPath = await resolveNodeModulesDirectory(name);
 
-    const nodeModulesPath = resolveNodeModulesDirectory(name);
+    if (!modulePath) {
+        throw new Error(`Can not find module path for fallback for ${ name }`);
+    }
 
     if (!nodeModulesPath) {
         throw new Error(`Can not find node modules path for fallback for ${ name }`);
     }
 
-    const modulePath = join(nodeModulesPath, name);
     // $FlowFixMe
     const pkg = require(join(modulePath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
     const version = pkg.version;
     let dependencies = {};
 
     for (const dependencyName of Object.keys(pkg.dependencies || {})) {
-        const dependencyPath = resolveNodeModulesDirectory(dependencyName, [ modulePath ]);
+        const dependencyPath = resolveModuleDirectory(dependencyName, [ modulePath ]); // join(nodeModulesPath, dependencyName);
         // $FlowFixMe
         const dependencyPkg = require(join(dependencyPath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
 
@@ -248,7 +251,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
             return await poller.result();
         } catch (err) {
             if (fallback && resolveNodeModulesDirectory(name)) {
-                return getFallback(name);
+                return await getFallback(name);
             }
 
             throw err;

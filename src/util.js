@@ -251,7 +251,7 @@ export const lookupDNS = memoizePromise(async (domain : string) : Promise<string
     });
 });
 
-export function resolveNodeModulesDirectory(name : string, paths? : $ReadOnlyArray<string>) : ?string {
+export function resolveModuleDirectory(name : string, paths? : $ReadOnlyArray<string>) : ?string {
     let dir;
 
     try {
@@ -261,11 +261,25 @@ export function resolveNodeModulesDirectory(name : string, paths? : $ReadOnlyArr
         return;
     }
 
-    const nodeModules = `/${ NODE_MODULES }/`;
+    return dir.split('/').slice(0, -1).join('/');
+}
 
-    if (dir.indexOf(nodeModules) === -1) {
+export async function resolveNodeModulesDirectory(name : string, paths? : $ReadOnlyArray<string>) : Promise<?string> {
+    const moduleDir = resolveModuleDirectory(name, paths);
+
+    if (!moduleDir) {
         return;
     }
 
-    return `${ dir.split(nodeModules)[0] }${ nodeModules }`;
+    const localNodeModules = join(moduleDir, NODE_MODULES);
+
+    if (await exists(localNodeModules)) {
+        return localNodeModules;
+    }
+
+    const splitDir = moduleDir.split('/').slice(0, -1);
+
+    if (splitDir[splitDir.length - 1] === NODE_MODULES) {
+        return splitDir.join('/');
+    }
 }
