@@ -277,9 +277,10 @@ export async function resolveNodeModulesDirectory(name : string, paths? : $ReadO
         return localNodeModules;
     }
 
-    const splitDir = moduleDir.split('/').slice(0, -1);
+    const splitDir = moduleDir.split('/');
+    const nodeModulesIndex = splitDir.lastIndexOf(NODE_MODULES);
 
-    if (splitDir[splitDir.length - 1] === NODE_MODULES) {
-        return splitDir.join('/');
+    if (nodeModulesIndex !== -1) {
+        return splitDir.slice(0, nodeModulesIndex + 1).join('/');
     }
 }
