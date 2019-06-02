@@ -250,8 +250,13 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         try {
             return await poller.result();
         } catch (err) {
+
             if (fallback && resolveNodeModulesDirectory(name)) {
-                return await getFallback(name);
+                try {
+                    return await getFallback(name);
+                } catch (fallbackErr) {
+                    throw new Error(`${ err.stack }\n\nFallback failed:\n\n${ fallbackErr.stack }`);
+                }
             }
 
             throw err;
