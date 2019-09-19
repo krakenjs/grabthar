@@ -5,6 +5,7 @@ import { join } from 'path';
 import compareVersions from 'compare-versions';
 import { readFile } from 'fs-extra';
 
+import type { LoggerType, CacheType } from './types';
 import { install, installFlat, type NpmOptionsType, info, type Package } from './npm';
 import { poll, createHomeDirectory, memoize, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
@@ -77,16 +78,17 @@ function getMajorVersion(version : string) : string {
     return version.split('.')[0];
 }
 
-function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npmOptions = {} } :
-    { name : string, tag : string, onError : ?(Error) => void, period? : number, flat? : boolean, npmOptions : NpmOptionsType }) : DistPoller {
+function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npmOptions = {}, logger, cache } :
+    { name : string, tag : string, onError : ?(Error) => void, period? : number, flat? : boolean, npmOptions : NpmOptionsType, logger : LoggerType, cache : ?CacheType }) : DistPoller {
     
     let stability : { [string] : string } = {};
 
     let installedModule;
+    const { registry } = npmOptions;
 
     let poller = poll({
         handler: async () => {
-            const moduleInfo = await info(name, npmOptions.registry);
+            const moduleInfo = await info(name, { registry, logger, cache });
 
             let distTagVersion = moduleInfo[DIST_TAGS][tag];
             const moduleVersions = Object.keys(moduleInfo.versions)
@@ -183,7 +185,16 @@ type NPMPollOptions = {
     period? : number,
     npmOptions? : NpmOptionsType,
     flat? : boolean,
-    fallback? : boolean
+    fallback? : boolean,
+    logger? : LoggerType,
+    cache? : CacheType
+};
+
+export const defaultLogger : LoggerType = {
+    debug: (...args : $ReadOnlyArray<mixed>) => console.debug(...args), // eslint-disable-line no-console
+    info:  (...args : $ReadOnlyArray<mixed>) => console.info(...args),  // eslint-disable-line no-console
+    warn:  (...args : $ReadOnlyArray<mixed>) => console.warn(...args), // eslint-disable-line no-console
+    error: (...args : $ReadOnlyArray<mixed>) => console.error(...args) // eslint-disable-line no-console
 };
 
 export async function getFallback(name : string) : Promise<ModuleDetails> {
@@ -222,12 +233,12 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
     };
 }
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, flat = false, npmOptions = {}, fallback = true } : NPMPollOptions) : NpmWatcher<Object> {
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, logger = defaultLogger, cache, flat = false, npmOptions = {}, fallback = true } : NPMPollOptions) : NpmWatcher<Object> {
 
     let pollers = {};
 
     for (let tag of tags) {
-        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, npmOptions });
+        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, npmOptions, logger, cache });
     }
 
     async function pollerGet(tag? : string) : Promise<ModuleDetails> {

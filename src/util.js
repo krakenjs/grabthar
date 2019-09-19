@@ -176,6 +176,25 @@ export function memoizePromise<R : mixed, A : Array<*>> (method : (...args: A) =
     return resultFunction;
 }
 
+export function inlineMemoizePromise<T, A : $ReadOnlyArray<mixed>>(method : (...args : A) => Promise<T>, key : string, handler : () => Promise<T>) : Promise<T> {
+    method.__inline_memoize_promoise_cache__ = method.__inline_memoize_promoise_cache__ || {};
+
+    if (method.__inline_memoize_promoise_cache__[key]) {
+        return method.__inline_memoize_promoise_cache__[key];
+    }
+
+    const promise = handler();
+    method.__inline_memoize_promoise_cache__[key] = promise;
+
+    promise.then(() => {
+        delete method.__inline_memoize_promoise_cache__[key];
+    }, () => {
+        delete method.__inline_memoize_promoise_cache__[key];
+    });
+
+    return promise;
+}
+
 export async function npmRun(command : string, options : Object) : Promise<string> {
     return await new Promise((resolve, reject) => {
         const startTime = Date.now();

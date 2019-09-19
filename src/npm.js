@@ -6,9 +6,10 @@ import { mkdir, exists, move } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
 
+import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { NPM, NODE_MODULES, PACKAGE } from './constants';
-import { memoize, memoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS } from './util';
+import { memoize, memoizePromise, inlineMemoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -72,15 +73,50 @@ export type Package = {|
     }
 |};
 
-export let info = memoizePromise(async (name : string, registry? : string = NPM_REGISTRY) : Promise<Package> => {
-    const res = await fetch(`${ registry }/${ name }`);
-
-    if (res.status !== 200) {
-        throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ name }`);
-    }
-
-    return await res.json();
-});
+export async function info (name : string, { registry = NPM_REGISTRY, logger, cache } : { registry? : string, cache : ?CacheType, logger : LoggerType }) : Promise<Package> {
+    return await inlineMemoizePromise(info, name, async () => {
+        const sanitizedName = name.replace(/[^a-zA-Z0-9]+/g, '_');
+        logger.info(`grabthar_info_${ sanitizedName }`, { registry });
+    
+        const cacheKey = `__grabthar_npm_info_${ sanitizedName }__`;
+    
+        if (cache) {
+            let cacheJson;
+    
+            try {
+                cacheJson = await cache.get(cacheKey);
+            } catch (err) {
+                logger.info(`grabthar_info_${ sanitizedName }_cache_error`, { err: err.stack || err.toString() });
+            }
+    
+            if (cacheJson) {
+                logger.info(`grabthar_info_${ sanitizedName }_cache_hit`);
+                return JSON.parse(cacheJson);
+            } else {
+                logger.info(`grabthar_info_${ sanitizedName }_cache_miss`);
+            }
+        }
+        
+        const res = await fetch(`${ registry }/${ name }`);
+    
+        if (res.status !== 200) {
+            throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ name }`);
+        }
+    
+        const json = res.json();
+    
+        if (cache) {
+            try {
+                logger.info(`grabthar_info_${ sanitizedName }_cache_write`);
+                await cache.set(cacheKey, JSON.stringify(json));
+            } catch (err) {
+                logger.info(`grabthar_info_${ sanitizedName }_cache_write_error`, { err: err.stack || err.toString() });
+            }
+        }
+    
+        return json;
+    });
+}
 
 export let installFlat = memoize(async (moduleInfo : Package, version : string, npmOptions? : NpmOptionsType = {}) : Promise<void> => {
     let versionInfo = moduleInfo.versions[version];
