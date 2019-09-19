@@ -103,11 +103,12 @@ export async function info (name : string, { registry = NPM_REGISTRY, logger, ca
             throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ name }`);
         }
     
-        const json = res.json();
+        const json = await res.json();
     
         if (cache) {
+            logger.info(`grabthar_info_${ sanitizedName }_cache_write`);
+
             try {
-                logger.info(`grabthar_info_${ sanitizedName }_cache_write`);
                 await cache.set(cacheKey, JSON.stringify(json));
             } catch (err) {
                 logger.info(`grabthar_info_${ sanitizedName }_cache_write_error`, { err: err.stack || err.toString() });
