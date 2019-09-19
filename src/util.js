@@ -7,6 +7,7 @@ import { lookup } from 'dns';
 import { mkdir, exists } from 'fs-extra';
 import { exec } from 'npm-run';
 
+import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON } from './constants';
 
 export async function makedir(dir : string) : Promise<void> {
@@ -302,4 +303,41 @@ export async function resolveNodeModulesDirectory(name : string, paths? : $ReadO
     if (nodeModulesIndex !== -1) {
         return splitDir.slice(0, nodeModulesIndex + 1).join('/');
     }
+}
+
+export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promise<T>, { cache, logger } : { cache : ?CacheType, logger : LoggerType }) : Promise<T> {
+    if (cache) {
+        let cacheResult;
+
+        try {
+            const cachePromise = cache.get(cacheKey);
+            cacheResult = await cachePromise;
+            if (cacheResult) {
+                cacheResult = JSON.parse(cacheResult);
+            }
+        } catch (err) {
+            logger.info(`${ cacheKey }_cache_error`, { err: err.stack || err.toString() });
+        }
+
+        if (cacheResult) {
+            logger.info(`${ cacheKey }_cache_hit`);
+            return cacheResult;
+        } else {
+            logger.info(`${ cacheKey }_cache_miss`);
+        }
+    }
+    
+    const result = await handler();
+
+    if (cache) {
+        logger.info(`${ cacheKey }_cache_write`);
+
+        try {
+            await cache.set(cacheKey, JSON.stringify(result));
+        } catch (err) {
+            logger.info(`${ cacheKey }_cache_write_error`, { err: err.stack || err.toString() });
+        }
+    }
+
+    return result;
 }

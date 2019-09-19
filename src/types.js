@@ -8,6 +8,6 @@ export type LoggerType = {|
 |};
 
 export type CacheType = {|
-    get : (string) => Promise<string | void>,
-    set : (string, string) => Promise<string>
+    get : <T>(string) => Promise<T | void>, // eslint-disable-line no-undef
+    set : <T>(string, T) => Promise<T> // eslint-disable-line no-undef
 |};

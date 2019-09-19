@@ -1,4 +1,5 @@
 /* @flow */
+/* eslint const-immutable/no-mutation: off */
 
 import { join } from 'path';
 
@@ -9,7 +10,7 @@ import fetch from 'node-fetch';
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { NPM, NODE_MODULES, PACKAGE } from './constants';
-import { memoize, memoizePromise, inlineMemoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS } from './util';
+import { memoize, memoizePromise, inlineMemoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS, cacheReadWrite } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -73,49 +74,44 @@ export type Package = {|
     }
 |};
 
-export async function info (name : string, { registry = NPM_REGISTRY, logger, cache } : { registry? : string, cache : ?CacheType, logger : LoggerType }) : Promise<Package> {
-    return await inlineMemoizePromise(info, name, async () => {
-        const sanitizedName = name.replace(/[^a-zA-Z0-9]+/g, '_');
-        logger.info(`grabthar_info_${ sanitizedName }`, { registry });
-    
-        const cacheKey = `__grabthar_npm_info_${ sanitizedName }__`;
-    
-        if (cache) {
-            let cacheJson;
-    
-            try {
-                cacheJson = await cache.get(cacheKey);
-            } catch (err) {
-                logger.info(`grabthar_info_${ sanitizedName }_cache_error`, { err: err.stack || err.toString() });
-            }
-    
-            if (cacheJson) {
-                logger.info(`grabthar_info_${ sanitizedName }_cache_hit`);
-                return JSON.parse(cacheJson);
-            } else {
-                logger.info(`grabthar_info_${ sanitizedName }_cache_miss`);
-            }
-        }
-        
-        const res = await fetch(`${ registry }/${ name }`);
-    
-        if (res.status !== 200) {
-            throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ name }`);
-        }
-    
-        const json = await res.json();
-    
-        if (cache) {
-            logger.info(`grabthar_info_${ sanitizedName }_cache_write`);
+function extractInfo(moduleInfo : Package) : Package {
+    const { name, versions: npmVersions, 'dist-tags': distTags } = moduleInfo;
 
-            try {
-                await cache.set(cacheKey, JSON.stringify(json));
-            } catch (err) {
-                logger.info(`grabthar_info_${ sanitizedName }_cache_write_error`, { err: err.stack || err.toString() });
-            }
-        }
+    const versions = {};
+    for (const version of Object.keys(npmVersions)) {
+        const versionData = npmVersions[version];
+        const { dependencies, dist } = versionData;
+        const { tarball } = dist;
+
+        versions[version] = {
+            dependencies,
+            dist: { tarball }
+        };
+    }
+
+    return { name, versions, 'dist-tags': distTags };
+}
+
+export async function info (moduleName : string, { registry = NPM_REGISTRY, logger, cache } : { registry? : string, cache : ?CacheType, logger : LoggerType }) : Promise<Package> {
+    return await inlineMemoizePromise(info, moduleName, async () => {
+
+        const sanitizedName = moduleName.replace(/[^a-zA-Z0-9]+/g, '_');
+        const cacheKey = `grabthar_npm_info_${ sanitizedName }`;
+
+        logger.info(`grabthar_info_${ sanitizedName }`, { registry });
+
+        const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
+            const res = await fetch(`${ registry }/${ moduleName }`);
     
-        return json;
+            if (res.status !== 200) {
+                throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
+            }
+        
+            return extractInfo(await res.json());
+
+        }, { logger, cache });
+
+        return { name, versions, 'dist-tags': distTags };
     });
 }
 
