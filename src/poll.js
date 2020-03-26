@@ -4,10 +4,9 @@ import { join } from 'path';
 
 import compareVersions from 'compare-versions';
 import { readFile } from 'fs-extra';
-import { memoize } from 'belter';
 
 import type { LoggerType, CacheType } from './types';
-import { install, installFlat, type NpmOptionsType, info, type Package } from './npm';
+import { install, installFlat, type NpmOptionsType, info, type Package, clearCache } from './npm';
 import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
@@ -27,13 +26,23 @@ function cleanName(name : string) : string {
     return name.replace(/\//g, '-');
 }
 
-async function installVersion({ moduleInfo, version, flat = false, npmOptions = {} } : {| moduleInfo : Package, version : string, flat? : boolean, npmOptions : NpmOptionsType |}) : Promise<InstallResult> {
+type InstallVersionOptions = {|
+    moduleInfo : Package,
+    version : string,
+    flat? : boolean,
+    npmOptions : NpmOptionsType,
+    logger : LoggerType
+|};
+
+async function installVersion({ moduleInfo, version, flat = false, npmOptions = {}, logger } : InstallVersionOptions) : Promise<InstallResult> {
     const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
 
+    npmOptions = { ...npmOptions, prefix: newRoot };
+
     if (flat) {
-        await installFlat(moduleInfo, version, { ...npmOptions, prefix: newRoot });
+        await installFlat(moduleInfo, version, { npmOptions, logger });
     } else {
-        await install(moduleInfo.name, version, { ...npmOptions, prefix: newRoot });
+        await install(moduleInfo, version, { npmOptions, logger });
     }
     
     const nodeModulesPath = join(newRoot, NODE_MODULES);
@@ -85,11 +94,10 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
     const stability : { [string] : string } = {};
 
     let installedModule;
-    const { registry } = npmOptions;
 
     const poller = poll({
         handler: async () => {
-            const moduleInfo = await info(name, { registry, logger, cache });
+            const moduleInfo = await info(name, { logger, cache, npmOptions });
 
             let distTagVersion = moduleInfo[DIST_TAGS][tag];
             const moduleVersions = Object.keys(moduleInfo.versions)
@@ -142,7 +150,9 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
 
             if (!installedModule || installedModule.version !== distTagVersion) {
                 const version = distTagVersion;
-                const { nodeModulesPath, modulePath, dependencies } = await installVersion({ moduleInfo, version, flat, npmOptions });
+                const { nodeModulesPath, modulePath, dependencies } = await installVersion({
+                    moduleInfo, version, flat, npmOptions, logger
+                });
 
                 installedModule = {
                     nodeModulesPath,
@@ -318,5 +328,5 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
 }
 
 npmPoll.flushCache = () => {
-    memoize.clear();
+    clearCache();
 };

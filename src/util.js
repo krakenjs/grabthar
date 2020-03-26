@@ -6,7 +6,6 @@ import { lookup } from 'dns';
 
 import { mkdir, exists } from 'fs-extra';
 import { exec } from 'npm-run';
-import { memoize } from 'belter';
 
 import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON } from './constants';
@@ -123,39 +122,6 @@ export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : {
     return result;
 }
 
-export function memoizePromise<R : mixed, A : $ReadOnlyArray<*>> (method : (...args: A) => Promise<R>) : ((...args: A) => Promise<R>) {
-    const resultFunction = memoize((...args : A) => {
-        const result = method(...args);
-        
-        result.then(resultFunction.clear, resultFunction.clear);
-
-        return result;
-    });
-
-    // $FlowFixMe
-    return resultFunction;
-}
-
-export function inlineMemoizePromise<T, A : $ReadOnlyArray<mixed>>(method : (...args : A) => Promise<T>, key : string, handler : () => Promise<T>) : Promise<T> {
-    // $FlowFixMe
-    const inlinePromiseCache : { [string] : Promise<T> } = method.__inline_memoize_promise_cache__ = method.__inline_memoize_promise_cache__ || {};
-
-    if (inlinePromiseCache[key]) {
-        return inlinePromiseCache[key];
-    }
-
-    const promise = handler();
-    inlinePromiseCache[key] = promise;
-
-    promise.then(() => {
-        delete inlinePromiseCache[key];
-    }, () => {
-        delete inlinePromiseCache[key];
-    });
-
-    return promise;
-}
-
 export async function npmRun(command : string, options : Object) : Promise<string> {
     return await new Promise((resolve, reject) => {
         const startTime = Date.now();
@@ -218,7 +184,7 @@ export function stringifyCommandLineOptions(options : { [string] : string | bool
 }
 
 // $FlowFixMe
-export const lookupDNS = memoizePromise(async (domain : string) : Promise<string> => {
+export const lookupDNS = async (domain : string) : Promise<string> => {
     return await new Promise((resolve, reject) => {
         domain = domain.replace(/^https?:\/\//, '');
         lookup(domain, (err : ?Error, res : string) => {
@@ -229,7 +195,7 @@ export const lookupDNS = memoizePromise(async (domain : string) : Promise<string
             }
         });
     });
-});
+};
 
 export function resolveModuleDirectory(name : string, paths? : $ReadOnlyArray<string>) : ?string {
     let dir;
@@ -300,4 +266,14 @@ export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promi
     }
 
     return result;
+}
+
+export function sanitizeString(str : string) : string {
+    return str.replace(/[^a-zA-Z0-9]+/g, '_');
+}
+
+export function clearObject<T>(obj : { [string] : T }) : void {
+    for (const key of Object.keys(obj)) {
+        delete obj[key];
+    }
 }
