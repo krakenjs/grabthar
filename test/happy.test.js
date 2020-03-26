@@ -26,7 +26,7 @@ test(`Should poll for a module and install it, then return the correct latest ve
             baz: '6.12.99'
         };
 
-        let info = {
+        const info = {
             'name':        MODULE_NAME,
             'dist-tags': {
                 latest:  MODULE_VERSION
@@ -39,27 +39,27 @@ test(`Should poll for a module and install it, then return the correct latest ve
             }
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         const getReq = nock('https://registry.npmjs.org')
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             name:    MODULE_NAME,
             onError: reject
         });
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
             throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
         }
 
-        let { prefix } = next.cmd.opts;
+        const { prefix } = next.cmd.opts;
 
         if (!prefix) {
             throw new Error(`Expected npm install to pass prefix`);
@@ -67,22 +67,22 @@ test(`Should poll for a module and install it, then return the correct latest ve
 
         await next.res(JSON.stringify({}));
 
-        let { version, dependencies } = await poller.get();
+        const { version, dependencies } = await poller.get();
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        let actualDependencyNumbber = Object.keys(dependencies).length;
+        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        const actualDependencyNumbber = Object.keys(dependencies).length;
 
         if (expectedDependencyNumber !== actualDependencyNumbber) {
             throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
         }
 
-        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            let actualVersion = dependencies[dependencyName].version;
+        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            const actualVersion = dependencies[dependencyName].version;
 
             if (expectedVersion !== actualVersion) {
                 throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
@@ -105,7 +105,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
             baz: '6.12.99'
         };
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest: MODULE_VERSION
@@ -119,27 +119,27 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         const getReq = nock('https://registry.npmjs.org')
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             name:    MODULE_NAME,
             onError: reject
         });
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
             throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
         }
 
-        let { prefix } = next.cmd.opts;
+        const { prefix } = next.cmd.opts;
 
         if (!prefix) {
             throw new Error(`Expected npm install to pass prefix`);
@@ -147,22 +147,22 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify({}));
 
-        let { version, dependencies } = await poller.get('latest');
+        const { version, dependencies } = await poller.get('latest');
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        let actualDependencyNumbber = Object.keys(dependencies).length;
+        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        const actualDependencyNumbber = Object.keys(dependencies).length;
 
         if (expectedDependencyNumber !== actualDependencyNumbber) {
             throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
         }
 
-        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            let actualVersion = dependencies[dependencyName].version;
+        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            const actualVersion = dependencies[dependencyName].version;
 
             if (expectedVersion !== actualVersion) {
                 throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
@@ -185,7 +185,7 @@ test(`Should poll for a module and install it, then return the correct release v
             baz: '6.12.99'
         };
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest: MODULE_VERSION
@@ -199,27 +199,27 @@ test(`Should poll for a module and install it, then return the correct release v
 
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         const getReq = nock('https://registry.npmjs.org')
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             name:    MODULE_NAME,
             onError: reject
         });
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
             throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
         }
 
-        let { prefix } = next.cmd.opts;
+        const { prefix } = next.cmd.opts;
 
         if (!prefix) {
             throw new Error(`Expected npm install to pass prefix`);
@@ -227,22 +227,22 @@ test(`Should poll for a module and install it, then return the correct release v
 
         await next.res(JSON.stringify({}));
 
-        let { version, dependencies } = await poller.get();
+        const { version, dependencies } = await poller.get();
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        let actualDependencyNumbber = Object.keys(dependencies).length;
+        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        const actualDependencyNumbber = Object.keys(dependencies).length;
 
         if (expectedDependencyNumber !== actualDependencyNumbber) {
             throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
         }
 
-        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            let actualVersion = dependencies[dependencyName].version;
+        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            const actualVersion = dependencies[dependencyName].version;
 
             if (expectedVersion !== actualVersion) {
                 throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
@@ -265,7 +265,7 @@ test(`Should poll for a module and install it, then explicitly return the correc
             baz: '6.12.99'
         };
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest:  '1.3.57',
@@ -279,13 +279,13 @@ test(`Should poll for a module and install it, then explicitly return the correc
             }
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         const getReq = nock('https://registry.npmjs.org')
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             tags:    [ 'release' ],
             name:    MODULE_NAME,
             onError: reject
@@ -293,14 +293,14 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
             throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
         }
 
-        let { prefix } = next.cmd.opts;
+        const { prefix } = next.cmd.opts;
 
         if (!prefix) {
             throw new Error(`Expected npm install to pass prefix`);
@@ -308,22 +308,22 @@ test(`Should poll for a module and install it, then explicitly return the correc
 
         await next.res(JSON.stringify({}));
 
-        let { version, dependencies } = await poller.get('release');
+        const { version, dependencies } = await poller.get('release');
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        let actualDependencyNumbber = Object.keys(dependencies).length;
+        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        const actualDependencyNumbber = Object.keys(dependencies).length;
 
         if (expectedDependencyNumber !== actualDependencyNumbber) {
             throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
         }
 
-        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            let actualVersion = dependencies[dependencyName].version;
+        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            const actualVersion = dependencies[dependencyName].version;
 
             if (expectedVersion !== actualVersion) {
                 throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
@@ -346,7 +346,7 @@ test(`Should use the base version if the latest version is not available`, async
             baz: '6.12.99'
         };
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest:  MODULE_VERSION
@@ -359,20 +359,20 @@ test(`Should use the base version if the latest version is not available`, async
             }
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         const getReq = nock('https://registry.npmjs.org')
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             name:    MODULE_NAME,
             onError: reject
         });
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -381,7 +381,7 @@ test(`Should use the base version if the latest version is not available`, async
 
         await next.res(JSON.stringify({}));
 
-        let { version } = await poller.get();
+        const { version } = await poller.get();
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
@@ -406,7 +406,7 @@ test(`Should install both release and latest versions if they are different`, as
         };
 
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 'latest':  LATEST_VERSION,
@@ -424,13 +424,13 @@ test(`Should install both release and latest versions if they are different`, as
             }
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         const getReq = nock('https://registry.npmjs.org')
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             tags:    [ 'latest', 'release' ],
             name:    MODULE_NAME,
             onError: reject
@@ -442,7 +442,7 @@ test(`Should install both release and latest versions if they are different`, as
         let latestVersionInstalled = false;
 
         for (let i = 0; i < 2; i += 1) {
-            let next = await exec.next();
+            const next = await exec.next();
             checkNpmOptions(next.cmd);
 
             if (next.cmd.args[1] !== 'install') {
@@ -454,7 +454,7 @@ test(`Should install both release and latest versions if they are different`, as
             if (next.cmd.args[2] === `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
                 releaseVersionInstalled = true;
 
-                let { version: releaseVersion } = await poller.get('release');
+                const { version: releaseVersion } = await poller.get('release');
 
                 if (releaseVersion !== RELEASE_VERSION) {
                     throw new Error(`Expected npm install version '${ RELEASE_VERSION }' to match moduleVersion '${ releaseVersion }'`);
@@ -464,7 +464,7 @@ test(`Should install both release and latest versions if they are different`, as
             } else if (next.cmd.args[2] === `${ MODULE_NAME }@${ LATEST_VERSION }`) {
                 latestVersionInstalled = true;
 
-                let { version: latestVersion } = await poller.get('latest');
+                const { version: latestVersion } = await poller.get('latest');
 
                 if (latestVersion !== LATEST_VERSION) {
                     throw new Error(`Expected npm install version '${ LATEST_VERSION }' to match moduleVersion '${ latestVersion }'`);
@@ -501,7 +501,7 @@ test(`Should poll for a module and install it with custom npm options, and pass 
 
         const REGISTRY = 'https://www.paypal.com';
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest: MODULE_VERSION
@@ -514,7 +514,7 @@ test(`Should poll for a module and install it with custom npm options, and pass 
             }
         };
 
-        let exec = mockExec();
+        const exec = mockExec();
 
         nock(REGISTRY)
             .get(`/info`)
@@ -524,7 +524,7 @@ test(`Should poll for a module and install it with custom npm options, and pass 
             .get(`/${ MODULE_NAME }`)
             .reply(200, info);
 
-        let poller = poll({
+        const poller = poll({
             name:       MODULE_NAME,
             onError:    reject,
             npmOptions: {
@@ -534,14 +534,14 @@ test(`Should poll for a module and install it with custom npm options, and pass 
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
             throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
         }
 
-        let { prefix } = next.cmd.opts;
+        const { prefix } = next.cmd.opts;
 
         if (!prefix) {
             throw new Error(`Expected npm install to pass prefix`);
@@ -549,24 +549,24 @@ test(`Should poll for a module and install it with custom npm options, and pass 
 
         await next.res(JSON.stringify({}));
 
-        let pollerPromise = poller.get();
+        const pollerPromise = poller.get();
         
-        let { version, dependencies } = await pollerPromise;
+        const { version, dependencies } = await pollerPromise;
 
         if (version !== MODULE_VERSION) {
             throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
         }
 
-        let expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        let actualDependencyNumbber = Object.keys(dependencies).length;
+        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
+        const actualDependencyNumbber = Object.keys(dependencies).length;
 
         if (expectedDependencyNumber !== actualDependencyNumbber) {
             throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
         }
 
-        for (let dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            let expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            let actualVersion = dependencies[dependencyName].version;
+        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
+            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
+            const actualVersion = dependencies[dependencyName].version;
 
             if (expectedVersion !== actualVersion) {
                 throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);

@@ -6,18 +6,23 @@ import { join } from 'path';
 import { mkdir, exists, move } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
+import { memoize } from 'belter';
 
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { NPM, NODE_MODULES, PACKAGE } from './constants';
-import { memoize, memoizePromise, inlineMemoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS, cacheReadWrite } from './util';
+import { memoizePromise, inlineMemoizePromise, npmRun, stringifyCommandLineOptions, lookupDNS, cacheReadWrite } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
-export type NpmOptionsType = {
+export type NpmOptionsType = {|
     prefix? : string,
-    registry? : string
-};
+    registry? : string,
+    cache? : string,
+    json? : boolean,
+    production? : boolean,
+    silent? : boolean
+|};
 
 const DEFAULT_NPM_OPTIONS : NpmOptionsType = {
     silent:     true,
@@ -25,6 +30,11 @@ const DEFAULT_NPM_OPTIONS : NpmOptionsType = {
     production: true,
     cache:      NPM_CACHE_DIR,
     registry:   NPM_REGISTRY
+};
+
+const getDefaultNpmOptions = () : NpmOptionsType => {
+    // $FlowFixMe
+    return {};
 };
 
 const verifyRegistry = memoizePromise(async (domain : string) : Promise<void> => {
@@ -36,8 +46,8 @@ const verifyRegistry = memoizePromise(async (domain : string) : Promise<void> =>
 });
 
 
-export async function npm(command : string, args : Array<string> = [], npmOptions : ?NpmOptionsType = {}, timeout? : number = NPM_TIMEOUT) : Promise<Object> {
-    npmOptions = Object.assign({}, DEFAULT_NPM_OPTIONS, npmOptions);
+export async function npm(command : string, args : $ReadOnlyArray<string> = [], npmOptions : ?NpmOptionsType = getDefaultNpmOptions(), timeout? : number = NPM_TIMEOUT) : Promise<Object> {
+    npmOptions = { ...DEFAULT_NPM_OPTIONS, ...npmOptions };
 
     if (!npmOptions.registry) {
         throw new Error(`Expected npm registry to be passed`);
@@ -45,14 +55,14 @@ export async function npm(command : string, args : Array<string> = [], npmOption
 
     await verifyRegistry(npmOptions.registry);
 
-    let cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
+    const cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
 
-    let cmdoptions : NpmOptionsType = {
+    const cmdoptions = {
         timeout,
         env: process.env
     };
     
-    let result = await npmRun(cmdstring, cmdoptions);
+    const result = await npmRun(cmdstring, cmdoptions);
 
     return JSON.parse(result);
 }
@@ -64,9 +74,9 @@ export type Package = {|
             'dependencies' : {
                 [ string ] : string
             },
-            'dist' : {
+            'dist' : {|
                 'tarball' : string
-            }
+            |}
         |}
     },
     'dist-tags' : {
@@ -92,7 +102,7 @@ function extractInfo(moduleInfo : Package) : Package {
     return { name, versions, 'dist-tags': distTags };
 }
 
-export async function info (moduleName : string, { registry = NPM_REGISTRY, logger, cache } : { registry? : string, cache : ?CacheType, logger : LoggerType }) : Promise<Package> {
+export async function info (moduleName : string, { registry = NPM_REGISTRY, logger, cache } : {| registry? : string, cache : ?CacheType, logger : LoggerType |}) : Promise<Package> {
     return await inlineMemoizePromise(info, moduleName, async () => {
 
         const sanitizedName = moduleName.replace(/[^a-zA-Z0-9]+/g, '_');
@@ -115,10 +125,10 @@ export async function info (moduleName : string, { registry = NPM_REGISTRY, logg
     });
 }
 
-export let installFlat = memoize(async (moduleInfo : Package, version : string, npmOptions? : NpmOptionsType = {}) : Promise<void> => {
-    let versionInfo = moduleInfo.versions[version];
-    let tarball = versionInfo.dist.tarball;
-    let prefix = npmOptions.prefix;
+export const installFlat = memoize(async (moduleInfo : Package, version : string, npmOptions? : NpmOptionsType = getDefaultNpmOptions()) : Promise<void> => {
+    const versionInfo = moduleInfo.versions[version];
+    const tarball = versionInfo.dist.tarball;
+    const prefix = npmOptions.prefix;
 
     if (!prefix) {
         throw new Error(`Prefix required for flat install`);
@@ -128,10 +138,10 @@ export let installFlat = memoize(async (moduleInfo : Package, version : string, 
         throw new Error(`Can not find tarball for ${ moduleInfo.name }`);
     }
 
-    let nodeModulesDir = join(prefix, NODE_MODULES);
-    let packageName = `${ PACKAGE }.tar.gz`;
-    let packageDir = join(nodeModulesDir, PACKAGE);
-    let moduleDir = join(nodeModulesDir, moduleInfo.name);
+    const nodeModulesDir = join(prefix, NODE_MODULES);
+    const packageName = `${ PACKAGE }.tar.gz`;
+    const packageDir = join(nodeModulesDir, PACKAGE);
+    const moduleDir = join(nodeModulesDir, moduleInfo.name);
 
     if (await exists(moduleDir)) {
         return;
@@ -147,6 +157,6 @@ export let installFlat = memoize(async (moduleInfo : Package, version : string, 
 });
 
 
-export let install = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = {}) : Promise<void> => {
+export const install = memoize(async (name : string, version : string, npmOptions : ?NpmOptionsType = getDefaultNpmOptions()) : Promise<void> => {
     await npm('install', [ `${ name }@${ version }` ], npmOptions);
 });

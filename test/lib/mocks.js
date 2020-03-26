@@ -8,42 +8,42 @@ import { nextTick } from './util';
 
 let mockChildProcessExec;
 
-let childProcessExec = childProcess.exec;
+const childProcessExec = childProcess.exec;
 
 // $FlowFixMe
 childProcess.exec = (...args) => {
     return mockChildProcessExec ? mockChildProcessExec(...args) : childProcessExec(...args);
 };
 
-export type MockCmd = {
-    args : Array<string>,
+export type MockCmd = {|
+    args : $ReadOnlyArray<string>,
     opts : {
         [string] : string
     }
-};
+|};
 
-type MockExecNext = {
+type MockExecNext = {|
     cmd : MockCmd,
     opts : ?Object,
     res : (string) => Promise<void>,
     err : (string) => Promise<void>
-};
+|};
 
-type MockExec = {
+type MockExec = {|
     next : () => Promise<MockExecNext>,
     cancel : () => void
-};
+|};
 
 const MOCK_EXEC_TIMEOUT = 1000;
 
 export function mockExec() : MockExec {
-    let buffer : Array<MockExecNext> = [];
+    const buffer : Array<MockExecNext> = [];
     let nextResolve;
     mockChildProcessExec = (command, opts, callback) => {
-        let { _ : args, ...options } = yargsParser(command);
-        let cmd = { args, opts: options };
+        const { _ : args, ...options } = yargsParser(command);
+        const cmd = { args, opts: options };
 
-        let res = async (text) => {
+        const res = async (text) => {
             if (!callback) {
                 throw new Error(`Expected callback to be passed`);
             }
@@ -51,7 +51,7 @@ export function mockExec() : MockExec {
             await nextTick();
         };
 
-        let err = async (message) => {
+        const err = async (message) => {
             if (!callback) {
                 throw new Error(`Expected callback to be passed`);
             }
@@ -73,7 +73,7 @@ export function mockExec() : MockExec {
             }
             return new Promise((resolve, reject) => {
                 nextResolve = resolve;
-                let err = new Error(`No new commands in ${ MOCK_EXEC_TIMEOUT }ms`);
+                const err = new Error(`No new commands in ${ MOCK_EXEC_TIMEOUT }ms`);
                 setTimeout(() => reject(err), MOCK_EXEC_TIMEOUT);
             });
         },

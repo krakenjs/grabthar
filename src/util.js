@@ -6,6 +6,7 @@ import { lookup } from 'dns';
 
 import { mkdir, exists } from 'fs-extra';
 import { exec } from 'npm-run';
+import { memoize } from 'belter';
 
 import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON } from './constants';
@@ -23,21 +24,21 @@ export async function makedir(dir : string) : Promise<void> {
     }
 }
 
-export async function createDirectory(dir : string, ...names : Array<string>) : Promise<string> {
+export async function createDirectory(dir : string, ...names : $ReadOnlyArray<string>) : Promise<string> {
     let path = dir;
-    for (let name of names) {
+    for (const name of names) {
         path = join(path, name);
         await makedir(path);
     }
     return path;
 }
 
-export async function createHomeDirectory(...names : Array<string>) : Promise<string> {
+export async function createHomeDirectory(...names : $ReadOnlyArray<string>) : Promise<string> {
     try {
         return await createDirectory(homedir(), ...names);
     } catch (err) {
 
-        let user = process.env.USER;
+        const user = process.env.USER;
 
         if (user) {
             return await createDirectory(join('/home', user), ...names);
@@ -52,19 +53,19 @@ export async function sleep(period : number) : Promise<void> {
 }
 
 export async function sleepWhile(condition : () => mixed, period : number, interval : number = 500) : Promise<void> {
-    let start = Date.now();
+    const start = Date.now();
     while ((Date.now() - start) < period && await condition()) {
         await sleep(interval);
     }
 }
 
-export type Poller<T> = {
+export type Poller<T> = {|
     start : () => Poller<T>,
     stop : () => Poller<T>,
     result : () => Promise<T>
-};
+|};
 
-export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : { handler : () => Promise<T> | T, onError? : ?(Error) => void, period : number, multiplier? : number }) : Poller<T> {
+export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : {| handler : () => Promise<T> | T, onError? : ?(Error) => void, period : number, multiplier? : number |}) : Poller<T> {
 
     let interval = period;
     let running = false;
@@ -72,7 +73,7 @@ export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : {
     let currentResult;
     let nextResult;
 
-    let poller = async () => {
+    const poller = async () => {
         // eslint-disable-next-line no-unmodified-loop-condition
         while (running) {
             let success = true;
@@ -104,7 +105,7 @@ export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : {
         }
     };
 
-    let result = {
+    const result = {
         start: () => {
             running = true;
             poller();
@@ -122,51 +123,9 @@ export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : {
     return result;
 }
 
-let memoizedFunctions = [];
-
-export function memoize<R : mixed, A : Array<*>> (method : (...args: A) => Promise<R> | R) : ((...args: A) => Promise<R> | R) {
-
-    let cache : { [key : string] : Promise<R> | R } = {};
-
-    let resultFunction = function memoizedFunction(...args : A) : Promise<R> | R {
-
-        let key : string;
-
-        try {
-            key = JSON.stringify(Array.prototype.slice.call(args));
-        } catch (err) {
-            throw new Error(`Arguments not serializable -- can not be used to memoize`);
-        }
-
-        if (!cache[key]) {
-            cache[key] = method(...args);
-        }
-
-        if (cache[key] && typeof cache[key].then === 'function' && typeof cache[key].catch === 'function') {
-            cache[key].catch(() => {
-                delete cache[key];
-            });
-        }
-
-        return cache[key];
-    };
-
-    resultFunction.clear = () => {
-        cache = {};
-    };
-
-    memoizedFunctions.push(resultFunction);
-
-    return resultFunction;
-}
-
-memoize.clear = () => {
-    memoizedFunctions.forEach(fn => fn.clear());
-};
-
-export function memoizePromise<R : mixed, A : Array<*>> (method : (...args: A) => Promise<R>) : ((...args: A) => Promise<R>) {
-    let resultFunction = memoize((...args : A) => {
-        let result = method(...args);
+export function memoizePromise<R : mixed, A : $ReadOnlyArray<*>> (method : (...args: A) => Promise<R>) : ((...args: A) => Promise<R>) {
+    const resultFunction = memoize((...args : A) => {
+        const result = method(...args);
         
         result.then(resultFunction.clear, resultFunction.clear);
 
@@ -178,19 +137,20 @@ export function memoizePromise<R : mixed, A : Array<*>> (method : (...args: A) =
 }
 
 export function inlineMemoizePromise<T, A : $ReadOnlyArray<mixed>>(method : (...args : A) => Promise<T>, key : string, handler : () => Promise<T>) : Promise<T> {
-    method.__inline_memoize_promoise_cache__ = method.__inline_memoize_promoise_cache__ || {};
+    // $FlowFixMe
+    const inlinePromiseCache : { [string] : Promise<T> } = method.__inline_memoize_promise_cache__ = method.__inline_memoize_promise_cache__ || {};
 
-    if (method.__inline_memoize_promoise_cache__[key]) {
-        return method.__inline_memoize_promoise_cache__[key];
+    if (inlinePromiseCache[key]) {
+        return inlinePromiseCache[key];
     }
 
     const promise = handler();
-    method.__inline_memoize_promoise_cache__[key] = promise;
+    inlinePromiseCache[key] = promise;
 
     promise.then(() => {
-        delete method.__inline_memoize_promoise_cache__[key];
+        delete inlinePromiseCache[key];
     }, () => {
-        delete method.__inline_memoize_promoise_cache__[key];
+        delete inlinePromiseCache[key];
     });
 
     return promise;
@@ -212,11 +172,11 @@ export async function npmRun(command : string, options : Object) : Promise<strin
                     let json;
                     try {
                         json = JSON.parse(stdout);
-                    } catch (err2) { // eslint-disable-line unicorn/catch-error-name
+                    } catch (err2) {
                         return reject(err);
                     }
                     if (json && json.error) {
-                        let { code, summary, detail } = json.error;
+                        const { code, summary, detail } = json.error;
                         return reject(new Error(`${ code } ${ summary }\n\n${ detail }`));
                     }
                     return reject(err);
@@ -239,10 +199,10 @@ export async function npmRun(command : string, options : Object) : Promise<strin
 }
 
 export function stringifyCommandLineOptions(options : { [string] : string | boolean }) : string {
-    let result = [];
-    for (let key of Object.keys(options)) {
-        let value = options[key];
-        let token = `--${ key }`;
+    const result = [];
+    for (const key of Object.keys(options)) {
+        const value = options[key];
+        const token = `--${ key }`;
 
         if (typeof value === 'boolean') {
             if (value === true) {
@@ -261,7 +221,7 @@ export function stringifyCommandLineOptions(options : { [string] : string | bool
 export const lookupDNS = memoizePromise(async (domain : string) : Promise<string> => {
     return await new Promise((resolve, reject) => {
         domain = domain.replace(/^https?:\/\//, '');
-        lookup(domain, (err : Error, res : string) => {
+        lookup(domain, (err : ?Error, res : string) => {
             if (err) {
                 reject(err);
             } else {
@@ -305,7 +265,7 @@ export async function resolveNodeModulesDirectory(name : string, paths? : $ReadO
     }
 }
 
-export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promise<T>, { cache, logger } : { cache : ?CacheType, logger : LoggerType }) : Promise<T> {
+export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promise<T>, { cache, logger } : {| cache : ?CacheType, logger : LoggerType |}) : Promise<T> {
     if (cache) {
         let cacheResult;
 

@@ -9,6 +9,10 @@ import { poll } from '../src';
 
 beforeEach(() => {
     poll.flushCache();
+
+    nock('https://registry.npmjs.org')
+        .get(`/info`)
+        .reply(200);
 });
 
 test(`Should fail on get in the case of an error in npm info`, async () => {
@@ -78,7 +82,7 @@ test(`Should call the onError callback in the case of an error in npm info`, asy
 
 test(`Should fail on get in the case of an error in npm install`, async () => {
 
-    let exec = mockExec();
+    const exec = mockExec();
     let poller;
     let error;
 
@@ -86,7 +90,7 @@ test(`Should fail on get in the case of an error in npm install`, async () => {
         const MODULE_NAME = 'grabthar-test-module';
         const MODULE_VERSION = '4.0.4';
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest: MODULE_VERSION
@@ -109,7 +113,7 @@ test(`Should fail on get in the case of an error in npm install`, async () => {
 
         getReq.done();
 
-        let next = await exec.next();
+        const next = await exec.next();
         checkNpmOptions(next.cmd);
 
         if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -135,16 +139,17 @@ test(`Should fail on get in the case of an error in npm install`, async () => {
 
 test(`Should call the onError callback in the case of an error in npm install`, async () => {
     
-    let exec = mockExec();
+    const exec = mockExec();
     let poller;
     let error;
 
     try {
+        // eslint-disable-next-line no-async-promise-executor
         await new Promise(async (resolve, reject) => {
             const MODULE_NAME = 'grabthar-test-module';
             const MODULE_VERSION = '4.0.4';
 
-            let info = {
+            const info = {
                 'name':      MODULE_NAME,
                 'dist-tags': {
                     latest: MODULE_VERSION
@@ -168,7 +173,7 @@ test(`Should call the onError callback in the case of an error in npm install`, 
 
             getReq.done();
 
-            let next = await exec.next();
+            const next = await exec.next();
             checkNpmOptions(next.cmd);
 
             if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
@@ -200,7 +205,7 @@ test(`Should fail when trying to get a module other than latest when tags not sp
         const MODULE_VERSION = '4.0.4';
         const RELEASE_VERSION = '5.0.5';
 
-        let info = {
+        const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
                 latest:  MODULE_VERSION,

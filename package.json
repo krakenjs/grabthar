@@ -5,14 +5,13 @@
   "main": "index.js",
   "scripts": {
     "flow-typed": "rm -rf ./flow-typed && flow-typed install",
-    "flow:build": "flow gen-flow-files ./src/index.js --out-dir ./src",
-    "babel": "babel src/*.js src/**/*.js --exclude=node_modules --out-dir . --source-maps inline",
+    "babel": "babel src/*.js src/**/*.js --ignore=node_modules --out-dir . --source-maps inline",
     "test": "npm run lint && npm run flow-typed && npm run flow && npm run jest",
     "flow": "flow",
     "lint": "eslint src/ test/ *.js",
-    "prepublish": "in-publish && npm run flow:build && npm run babel || not-in-publish",
-    "postpublish": "git checkout ./src && rm ./src/index.js.flow",
-    "jest": "jest test --env=node --no-cache --coverage --verbose --runInBand"
+    "prepublish": "in-publish && npm run babel || not-in-publish",
+    "postpublish": "git checkout ./src",
+    "jest": "jest test --env=node --no-cache --coverage --collectCoverageFrom=./src --verbose --runInBand"
   },
   "repository": {
     "type": "git",
@@ -29,13 +28,14 @@
   },
   "homepage": "https://github.com/krakenjs/grabthar#readme",
   "devDependencies": {
-    "flow-bin": "^0.69.0",
-    "grumbler-scripts": "^2.0.7",
-    "jest": "^22.4.3",
+    "flow-bin": "^0.112.0",
+    "grumbler-scripts": "^3",
+    "jest": "^24",
     "nock": "^10.0.6",
     "yargs-parser": "^10.0.0"
   },
   "dependencies": {
+    "belter": "^1.0.118",
     "child-process-promise": "^2.2.1",
     "compare-versions": "^3.1.0",
     "download": "^7.1.0",

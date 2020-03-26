@@ -1,6 +1,7 @@
 /* @flow */
 
 export async function wrapPromise<T : mixed>(handler : (reject : (reason : ?mixed) => void) => Promise<T>) : Promise<T> {
+    // eslint-disable-next-line no-async-promise-executor
     return await new Promise(async (resolve, reject) => {
         let result;
         try {

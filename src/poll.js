@@ -4,10 +4,11 @@ import { join } from 'path';
 
 import compareVersions from 'compare-versions';
 import { readFile } from 'fs-extra';
+import { memoize } from 'belter';
 
 import type { LoggerType, CacheType } from './types';
 import { install, installFlat, type NpmOptionsType, info, type Package } from './npm';
-import { poll, createHomeDirectory, memoize, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
+import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
 
@@ -15,10 +16,10 @@ type InstallResult = {|
     nodeModulesPath : string,
     modulePath : string,
     dependencies : {
-        [string] : {
+        [string] : {|
             version : string,
             path : string
-        }
+        |}
     }
 |};
 
@@ -26,8 +27,8 @@ function cleanName(name : string) : string {
     return name.replace(/\//g, '-');
 }
 
-async function installVersion({ moduleInfo, version, flat = false, npmOptions = {} } : { moduleInfo : Package, version : string, flat? : boolean, npmOptions : NpmOptionsType }) : Promise<InstallResult> {
-    let newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
+async function installVersion({ moduleInfo, version, flat = false, npmOptions = {} } : {| moduleInfo : Package, version : string, flat? : boolean, npmOptions : NpmOptionsType |}) : Promise<InstallResult> {
+    const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
 
     if (flat) {
         await installFlat(moduleInfo, version, { ...npmOptions, prefix: newRoot });
@@ -35,13 +36,13 @@ async function installVersion({ moduleInfo, version, flat = false, npmOptions = 
         await install(moduleInfo.name, version, { ...npmOptions, prefix: newRoot });
     }
     
-    let nodeModulesPath = join(newRoot, NODE_MODULES);
-    let modulePath = join(nodeModulesPath, moduleInfo.name);
-    let dependencies = {};
+    const nodeModulesPath = join(newRoot, NODE_MODULES);
+    const modulePath = join(nodeModulesPath, moduleInfo.name);
+    const dependencies = {};
 
-    let versionInfo = moduleInfo.versions[version];
+    const versionInfo = moduleInfo.versions[version];
 
-    for (let dependencyName of Object.keys(versionInfo.dependencies)) {
+    for (const dependencyName of Object.keys(versionInfo.dependencies)) {
         dependencies[dependencyName] = {
             version: versionInfo.dependencies[dependencyName],
             path:    join(nodeModulesPath, dependencyName)
@@ -55,38 +56,38 @@ async function installVersion({ moduleInfo, version, flat = false, npmOptions = 
     };
 }
 
-type ModuleDetails = {
+type ModuleDetails = {|
     nodeModulesPath : string,
     modulePath : string,
     version : string,
     dependencies : {
-        [string] : {
+        [string] : {|
             version : string,
             path : string
-        }
+        |}
     }
-};
+|};
 
-type DistPoller = {
+type DistPoller = {|
     result : () => Promise<ModuleDetails>,
     stop : () => void,
     markStable : (string) => void,
     markUnstable : (string) => void
-};
+|};
 
 function getMajorVersion(version : string) : string {
     return version.split('.')[0];
 }
 
 function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npmOptions = {}, logger, cache } :
-    { name : string, tag : string, onError : ?(Error) => void, period? : number, flat? : boolean, npmOptions : NpmOptionsType, logger : LoggerType, cache : ?CacheType }) : DistPoller {
+    {| name : string, tag : string, onError : ?(Error) => void, period? : number, flat? : boolean, npmOptions : NpmOptionsType, logger : LoggerType, cache : ?CacheType |}) : DistPoller {
     
-    let stability : { [string] : string } = {};
+    const stability : { [string] : string } = {};
 
     let installedModule;
     const { registry } = npmOptions;
 
-    let poller = poll({
+    const poller = poll({
         handler: async () => {
             const moduleInfo = await info(name, { registry, logger, cache });
 
@@ -97,9 +98,9 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
                 .reverse();
 
             stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
-            let majorVersion = getMajorVersion(distTagVersion);
+            const majorVersion = getMajorVersion(distTagVersion);
 
-            let eligibleVersions = moduleVersions.filter(ver => {
+            const eligibleVersions = moduleVersions.filter(ver => {
 
                 // Do not allow versions that are not the major version of the dist-tag
                 if (getMajorVersion(ver) !== majorVersion) {
@@ -124,7 +125,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
             }
 
 
-            let stableVersions = eligibleVersions.filter(ver => {
+            const stableVersions = eligibleVersions.filter(ver => {
 
                 if (stability[ver] !== STABILITY.STABLE) {
                     return false;
@@ -133,7 +134,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
                 return true;
             });
 
-            let previousVersion = stableVersions.length ? stableVersions[0] : eligibleVersions[0];
+            const previousVersion = stableVersions.length ? stableVersions[0] : eligibleVersions[0];
 
             if (stability[distTagVersion] === STABILITY.UNSTABLE) {
                 distTagVersion = previousVersion;
@@ -170,17 +171,18 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
     };
 }
 
-type NpmWatcher<T : Object> = {
+type NpmWatcher<T : Object> = {|
     get : (tag? : string) => Promise<ModuleDetails>,
+    read : (path? : string) => Promise<string>,
     import : (?string) => Promise<T>,
     cancel : () => void,
     markStable : (string) => void,
     markUnstable : (string) => void
-};
+|};
 
-type NPMPollOptions = {
+type NPMPollOptions = {|
     name : string,
-    tags? : Array<string>,
+    tags? : $ReadOnlyArray<string>,
     onError? : (Error) => void,
     period? : number,
     npmOptions? : NpmOptionsType,
@@ -188,7 +190,7 @@ type NPMPollOptions = {
     fallback? : boolean,
     logger? : LoggerType,
     cache? : CacheType
-};
+|};
 
 export const defaultLogger : LoggerType = {
     debug: (...args : $ReadOnlyArray<mixed>) => console.debug(...args), // eslint-disable-line no-console
@@ -212,7 +214,7 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
     // $FlowFixMe
     const pkg = require(join(modulePath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
     const version = pkg.version;
-    let dependencies = {};
+    const dependencies = {};
 
     for (const dependencyName of Object.keys(pkg.dependencies || {})) {
         const dependencyPath = resolveModuleDirectory(dependencyName, [ modulePath ]); // join(nodeModulesPath, dependencyName);
@@ -235,9 +237,9 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
 
 export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, logger = defaultLogger, cache, flat = false, npmOptions = {}, fallback = true } : NPMPollOptions) : NpmWatcher<Object> {
 
-    let pollers = {};
+    const pollers = {};
 
-    for (let tag of tags) {
+    for (const tag of tags) {
         pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, npmOptions, logger, cache });
     }
 
@@ -275,7 +277,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     }
 
     async function pollerImport <T : Object>(path = '') : T {
-        let { modulePath } = await pollerGet();
+        const { modulePath } = await pollerGet();
         // $FlowFixMe
         return require(join(modulePath, path)); // eslint-disable-line security/detect-non-literal-require
     }
@@ -288,19 +290,19 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     }
 
     function pollerCancel() {
-        for (let tag of tags) {
+        for (const tag of tags) {
             pollers[tag].stop();
         }
     }
 
     function pollerMarkStable(version : string) {
-        for (let tag of tags) {
+        for (const tag of tags) {
             pollers[tag].markStable(version);
         }
     }
 
     function pollerMarkUnstable(version : string) {
-        for (let tag of tags) {
+        for (const tag of tags) {
             pollers[tag].markUnstable(version);
         }
     }
