@@ -17,4 +17,3 @@ export const STABILITY = {
     STABLE:   'stable',
     UNSTABLE: 'unstable'
 };
-

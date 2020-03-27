@@ -6,7 +6,7 @@ import compareVersions from 'compare-versions';
 import { readFile } from 'fs-extra';
 
 import type { LoggerType, CacheType } from './types';
-import { install, installFlat, type NpmOptionsType, info, type Package, clearCache } from './npm';
+import { install, type NpmOptionsType, info, type Package, clearCache } from './npm';
 import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
@@ -30,29 +30,25 @@ type InstallVersionOptions = {|
     moduleInfo : Package,
     version : string,
     flat? : boolean,
+    dependencies? : boolean,
     npmOptions : NpmOptionsType,
     logger : LoggerType
 |};
 
-async function installVersion({ moduleInfo, version, flat = false, npmOptions = {}, logger } : InstallVersionOptions) : Promise<InstallResult> {
+async function installVersion({ moduleInfo, version, flat = false, dependencies = true, npmOptions = {}, logger } : InstallVersionOptions) : Promise<InstallResult> {
     const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
 
     npmOptions = { ...npmOptions, prefix: newRoot };
-
-    if (flat) {
-        await installFlat(moduleInfo, version, { npmOptions, logger });
-    } else {
-        await install(moduleInfo, version, { npmOptions, logger });
-    }
+    await install(moduleInfo.name, version, { npmOptions, logger, flat, dependencies });
     
     const nodeModulesPath = join(newRoot, NODE_MODULES);
     const modulePath = join(nodeModulesPath, moduleInfo.name);
-    const dependencies = {};
+    const moduleDependencies = {};
 
     const versionInfo = moduleInfo.versions[version];
 
     for (const dependencyName of Object.keys(versionInfo.dependencies)) {
-        dependencies[dependencyName] = {
+        moduleDependencies[dependencyName] = {
             version: versionInfo.dependencies[dependencyName],
             path:    join(nodeModulesPath, dependencyName)
         };
@@ -61,7 +57,7 @@ async function installVersion({ moduleInfo, version, flat = false, npmOptions = 
     return {
         nodeModulesPath,
         modulePath,
-        dependencies
+        dependencies: moduleDependencies
     };
 }
 

@@ -2,10 +2,12 @@
 /* eslint const-immutable/no-mutation: off */
 
 import { join } from 'path';
+import { tmpdir } from 'os';
 
-import { mkdir, exists, move } from 'fs-extra';
+import { ensureDir, exists, move } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
+import uuid from 'uuid';
 
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
@@ -110,14 +112,15 @@ function extractInfo(moduleInfo : Package) : Package {
 }
 
 type InfoOptions = {|
-    npmOptions : NpmOptionsType,
+    npmOptions : NpmOptionsType | void,
     cache : ?CacheType,
     logger : LoggerType
 |};
 
 const infoCache : { [string] : Promise<Package> } = {};
 
-export async function info(moduleName : string, { npmOptions = getDefaultNpmOptions(), logger, cache } : InfoOptions) : Promise<Package> {
+export async function info(moduleName : string, opts : InfoOptions) : Promise<Package> {
+    const { npmOptions = getDefaultNpmOptions(), logger, cache } = opts;
     const memoryCacheKey = JSON.stringify({ moduleName, npmOptions });
     const { registry = NPM_REGISTRY } = npmOptions;
 
@@ -144,17 +147,22 @@ export async function info(moduleName : string, { npmOptions = getDefaultNpmOpti
 }
 
 type InstallOptions = {|
-    npmOptions? : NpmOptionsType,
-    logger : LoggerType
+    npmOptions : NpmOptionsType,
+    logger : LoggerType,
+    cache? : CacheType,
+    dependencies? : boolean,
+    flat? : boolean
 |};
 
-const installFlatCache : { [string] : Promise<void> } = {};
+const installSingleCache : { [string] : Promise<void> } = {};
 
-export const installFlat = async (moduleInfo : Package, version : string, { npmOptions = getDefaultNpmOptions(), logger } : InstallOptions) : Promise<void> => {
-    const installFlatMemoryCacheKey = JSON.stringify({ moduleInfo, version, npmOptions });
+export const installSingle = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
+    const { npmOptions = getDefaultNpmOptions(), cache, logger } = opts;
+    const installSingleMemoryCacheKey = JSON.stringify({ moduleName, version, npmOptions });
 
-    installFlatCache[installFlatMemoryCacheKey] = installFlatCache[installFlatMemoryCacheKey] || (async () => {
-        const { name: moduleName } = moduleInfo;
+    installSingleCache[installSingleMemoryCacheKey] = installSingleCache[installSingleMemoryCacheKey] || (async () => {
+        const moduleInfo = await info(moduleName, { npmOptions, cache, logger });
+
         const versionInfo = moduleInfo.versions[version];
         const tarball = versionInfo.dist.tarball;
         const { prefix, registry } = npmOptions;
@@ -172,31 +180,52 @@ export const installFlat = async (moduleInfo : Package, version : string, { npmO
 
         const nodeModulesDir = join(prefix, NODE_MODULES);
         const packageName = `${ PACKAGE }.tar.gz`;
-        const packageDir = join(nodeModulesDir, PACKAGE);
+
+        const tmpDir = join(tmpdir(), uuid.v4().slice(10));
+        const packageDir = join(tmpDir, PACKAGE);
         const moduleDir = join(nodeModulesDir, moduleInfo.name);
+        const moduleParentDir = join(moduleDir, '..');
 
         if (await exists(moduleDir)) {
             return;
         }
 
-        if (!await exists(nodeModulesDir)) {
-            await mkdir(nodeModulesDir);
-        }
+        await ensureDir(tmpDir);
+        await ensureDir(nodeModulesDir);
 
-        await download(tarball, nodeModulesDir, { extract: true, filename: packageName });
+        await download(tarball, tmpDir, { extract: true, filename: packageName });
+        await ensureDir(moduleParentDir);
         await move(packageDir, moduleDir);
     })();
 
-    return await installFlatCache[installFlatMemoryCacheKey];
+    return await installSingleCache[installSingleMemoryCacheKey];
+};
+
+export const installFlat = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
+    const { npmOptions, cache, logger, dependencies = false } = opts;
+
+    const tasks = [
+        installSingle(moduleName, version, opts)
+    ];
+
+    if (dependencies) {
+        const moduleInfo = await info(moduleName, { npmOptions, cache, logger });
+        const dependencyVersions = moduleInfo.versions[version].dependencies;
+        for (const dependencyName of Object.keys(dependencyVersions)) {
+            const dependencyVersion = dependencyVersions[dependencyName];
+            tasks.push(installSingle(dependencyName, dependencyVersion, opts));
+        }
+    }
+
+    await Promise.all(tasks);
 };
 
 const installCache : { [string] : Promise<void> } = {};
 
-export const install = async (moduleInfo : Package, version : string, { npmOptions = getDefaultNpmOptions(), logger } : InstallOptions) : Promise<void> => {
-    const installMemoryCacheKey = JSON.stringify({ moduleInfo, version, npmOptions });
+export const installFull = async (moduleName : string, version : string, { npmOptions = getDefaultNpmOptions(), logger } : InstallOptions) : Promise<void> => {
+    const installMemoryCacheKey = JSON.stringify({ moduleName, version, npmOptions });
 
     installCache[installMemoryCacheKey] = installCache[installMemoryCacheKey] || (async () => {
-        const { name: moduleName } = moduleInfo;
         const { registry } = npmOptions;
         const sanitizedName = sanitizeString(moduleName);
         logger.info(`grabthar_npm_install_${ sanitizedName }`, { registry });
@@ -206,9 +235,21 @@ export const install = async (moduleInfo : Package, version : string, { npmOptio
     return await installCache[installMemoryCacheKey];
 };
 
+export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
+    const { dependencies = true, flat = false } = opts;
+
+    if (flat) {
+        return await installFlat(moduleName, version, opts);
+    } else if (dependencies) {
+        return await installFull(moduleName, version, opts);
+    } else {
+        throw new Error(`Can not install with dependencies=false and flat=false`);
+    }
+};
+
 export function clearCache() {
     clearObject(verifyCache);
     clearObject(infoCache);
-    clearObject(installFlatCache);
+    clearObject(installSingleCache);
     clearObject(installCache);
 }
