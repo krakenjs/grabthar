@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "flow-typed": "rm -rf ./flow-typed && flow-typed install",
-    "babel": "babel src/*.js src/**/*.js --ignore=node_modules --out-dir . --source-maps inline",
+    "babel": "babel src --ignore=node_modules --out-dir src --source-maps inline",
     "test": "npm run lint && npm run flow-typed && npm run flow && npm run jest",
     "flow": "flow",
     "lint": "eslint src/ test/ *.js",
