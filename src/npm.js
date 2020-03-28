@@ -4,7 +4,7 @@
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { ensureDir, exists, move } from 'fs-extra';
+import { ensureDir, move, existsSync, mkdirSync } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
 import uuid from 'uuid';
@@ -13,7 +13,7 @@ import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { NPM, NODE_MODULES, PACKAGE } from './constants';
 import { npmRun, sanitizeString,
-    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject } from './util';
+    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -186,16 +186,24 @@ export const installSingle = async (moduleName : string, version : string, opts 
         const moduleDir = join(nodeModulesDir, moduleInfo.name);
         const moduleParentDir = join(moduleDir, '..');
 
-        if (await exists(moduleDir)) {
+        await ensureDir(tmpDir);
+        await ensureDir(nodeModulesDir);
+        await ensureDir(moduleParentDir);
+
+        if (existsSync(moduleDir)) {
             return;
         }
 
-        await ensureDir(tmpDir);
-        await ensureDir(nodeModulesDir);
+        mkdirSync(moduleDir);
 
-        await download(tarball, tmpDir, { extract: true, filename: packageName });
-        await ensureDir(moduleParentDir);
-        await move(packageDir, moduleDir);
+        try {
+            await ensureDir(moduleDir);
+            await download(tarball, tmpDir, { extract: true, filename: packageName });
+            await move(packageDir, moduleDir, { overwrite: true });
+        } catch (err) {
+            await rmrf(moduleDir);
+            throw err;
+        }
     })();
 
     return await installSingleCache[installSingleMemoryCacheKey];

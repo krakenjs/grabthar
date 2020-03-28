@@ -5,6 +5,7 @@ import { homedir } from 'os';
 import { lookup } from 'dns';
 
 import { mkdir, exists } from 'fs-extra';
+import rmfr from 'rmfr';
 import { exec } from 'npm-run';
 
 import type { CacheType, LoggerType } from './types';
@@ -275,5 +276,13 @@ export function sanitizeString(str : string) : string {
 export function clearObject<T>(obj : { [string] : T }) : void {
     for (const key of Object.keys(obj)) {
         delete obj[key];
+    }
+}
+
+export async function rmrf(dir : string) : Promise<void> {
+    try {
+        await rmfr(dir);
+    } catch (err) {
+        // pass
     }
 }
