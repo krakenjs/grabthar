@@ -13,7 +13,7 @@ import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { NPM, NODE_MODULES, PACKAGE } from './constants';
 import { npmRun, sanitizeString,
-    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf } from './util';
+    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf, useFileSystemLock } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -246,13 +246,15 @@ export const installFull = async (moduleName : string, version : string, { npmOp
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
     const { dependencies = true, flat = false } = opts;
 
-    if (flat) {
-        return await installFlat(moduleName, version, opts);
-    } else if (dependencies) {
-        return await installFull(moduleName, version, opts);
-    } else {
-        throw new Error(`Can not install with dependencies=false and flat=false`);
-    }
+    return await useFileSystemLock(async () => {
+        if (flat) {
+            return await installFlat(moduleName, version, opts);
+        } else if (dependencies) {
+            return await installFull(moduleName, version, opts);
+        } else {
+            throw new Error(`Can not install with dependencies=false and flat=false`);
+        }
+    });
 };
 
 export function clearCache() {

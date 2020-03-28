@@ -1,10 +1,10 @@
 /* @flow */
 
 import { join } from 'path';
-import { homedir } from 'os';
+import { homedir, tmpdir } from 'os';
 import { lookup } from 'dns';
 
-import { mkdir, exists } from 'fs-extra';
+import { mkdir, exists, readFile, remove, writeFile } from 'fs-extra';
 import rmfr from 'rmfr';
 import { exec } from 'npm-run';
 
@@ -265,6 +265,60 @@ export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promi
             logger.info(`${ cacheKey }_cache_write_error`, { err: err.stack || err.toString() });
         }
     }
+
+    return result;
+}
+
+let locked = false;
+const MAX_LOCK_TIME = 2 * 60 * 1000;
+const LOCK_FILE = join(tmpdir(), 'grabthar.lock');
+
+const acquireLock = async () => {
+    locked = true;
+    await writeFile(LOCK_FILE, parseInt(Date.now(), 10).toString());
+};
+
+const releaseLock = async () => {
+    locked = false;
+    await remove(LOCK_FILE);
+};
+
+const isLocked = async () => {
+    return locked || await exists(LOCK_FILE);
+};
+
+const getLockTime = async () : Promise<number> => {
+    const lock = await readFile(LOCK_FILE);
+    const time = parseInt(lock.toString(), 10);
+    return time;
+};
+
+export async function useFileSystemLock<T>(task : () => Promise<T>) : Promise<T> {
+    const startTime = parseInt(Date.now(), 10);
+    
+    while (await isLocked()) {
+        const time = await getLockTime();
+        
+        if ((startTime - time) > MAX_LOCK_TIME) {
+            await releaseLock();
+        } else {
+            await sleep(1000);
+            continue;
+        }
+    }
+
+    let result;
+
+    await acquireLock();
+
+    try {
+        result = await task();
+    } catch (err) {
+        await await releaseLock();
+        throw err;
+    }
+
+    await releaseLock();
 
     return result;
 }
