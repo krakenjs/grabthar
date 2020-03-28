@@ -32,14 +32,15 @@ type InstallVersionOptions = {|
     flat? : boolean,
     dependencies? : boolean,
     npmOptions : NpmOptionsType,
-    logger : LoggerType
+    logger : LoggerType,
+    cache : ?CacheType
 |};
 
-async function installVersion({ moduleInfo, version, flat = false, dependencies = true, npmOptions = {}, logger } : InstallVersionOptions) : Promise<InstallResult> {
+async function installVersion({ moduleInfo, version, flat = false, dependencies = true, npmOptions = {}, logger, cache } : InstallVersionOptions) : Promise<InstallResult> {
     const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
 
     npmOptions = { ...npmOptions, prefix: newRoot };
-    await install(moduleInfo.name, version, { npmOptions, logger, flat, dependencies });
+    await install(moduleInfo.name, version, { npmOptions, logger, cache, flat, dependencies });
     
     const nodeModulesPath = join(newRoot, NODE_MODULES);
     const modulePath = join(nodeModulesPath, moduleInfo.name);
@@ -147,7 +148,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
             if (!installedModule || installedModule.version !== distTagVersion) {
                 const version = distTagVersion;
                 const { nodeModulesPath, modulePath, dependencies } = await installVersion({
-                    moduleInfo, version, flat, npmOptions, logger
+                    moduleInfo, version, flat, npmOptions, logger, cache
                 });
 
                 installedModule = {

@@ -149,7 +149,7 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
 type InstallOptions = {|
     npmOptions : NpmOptionsType,
     logger : LoggerType,
-    cache? : CacheType,
+    cache? : ?CacheType,
     dependencies? : boolean,
     flat? : boolean
 |};
