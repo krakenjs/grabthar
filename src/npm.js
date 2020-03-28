@@ -176,7 +176,7 @@ export const installSingle = async (moduleName : string, version : string, opts 
         }
 
         const sanitizedName = sanitizeString(moduleName);
-        logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { registry });
+        logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { version, registry });
 
         const nodeModulesDir = join(prefix, NODE_MODULES);
         const packageName = `${ PACKAGE }.tar.gz`;
@@ -228,7 +228,7 @@ export const installFull = async (moduleName : string, version : string, { npmOp
     installCache[installMemoryCacheKey] = installCache[installMemoryCacheKey] || (async () => {
         const { registry } = npmOptions;
         const sanitizedName = sanitizeString(moduleName);
-        logger.info(`grabthar_npm_install_${ sanitizedName }`, { registry });
+        logger.info(`grabthar_npm_install_${ sanitizedName }`, { version, registry });
         await npm('install', [ `${ moduleName }@${ version }` ], npmOptions);
     })();
 
