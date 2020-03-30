@@ -250,7 +250,15 @@ export const install = async (moduleName : string, version : string, opts : Inst
 
     return await useFileSystemLock(async () => {
         if (flat) {
-            return await installFlat(moduleName, version, opts);
+            try {
+                return await installFlat(moduleName, version, opts);
+            } catch (err) {
+                if (dependencies) {
+                    return await installFull(moduleName, version, opts);
+                }
+
+                throw err;
+            }
         } else if (dependencies) {
             return await installFull(moduleName, version, opts);
         } else {
