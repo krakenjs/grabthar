@@ -136,7 +136,9 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
                 throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
             }
 
-            return extractInfo(await res.json());
+            const extractedInfo = extractInfo(await res.json());
+            delete infoCache[memoryCacheKey];
+            return extractedInfo;
 
         }, { logger, cache });
 
