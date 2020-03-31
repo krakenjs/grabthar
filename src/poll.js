@@ -134,17 +134,19 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
                 throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
             }
 
-
             const stableVersions = eligibleVersions.filter(ver => {
-
-                if (stability[ver] !== STABILITY.STABLE) {
+                if (stability[ver] === STABILITY.UNSTABLE) {
                     return false;
                 }
 
                 return true;
             });
 
-            const previousVersion = stableVersions.length ? stableVersions[0] : eligibleVersions[0];
+            const previousVersions = stableVersions.filter(ver => {
+                return compareVersions(distTagVersion, ver) === 1;
+            });
+            
+            const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
 
             if (stability[distTagVersion] === STABILITY.UNSTABLE) {
                 distTagVersion = previousVersion;
