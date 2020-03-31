@@ -97,6 +97,11 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
             const moduleInfo = await info(name, { logger, cache, npmOptions });
 
             let distTagVersion = moduleInfo[DIST_TAGS][tag];
+
+            if (!distTagVersion) {
+                throw new Error(`No ${ tag } tag found for ${ name } - ${ JSON.stringify(moduleInfo[DIST_TAGS]) }`);
+            }
+
             const moduleVersions = Object.keys(moduleInfo.versions)
                 .filter(ver => ver.match(/^\d+\.\d+\.\d+$/))
                 .sort(compareVersions)
