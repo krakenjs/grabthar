@@ -136,16 +136,18 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
                 throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
             }
 
-            const extractedInfo = extractInfo(await res.json());
-            delete infoCache[memoryCacheKey];
-            return extractedInfo;
+            return extractInfo(await res.json());
 
         }, { logger, cache });
 
         return { name, versions, 'dist-tags': distTags };
     })();
 
-    return await infoCache[memoryCacheKey];
+    try {
+        return await infoCache[memoryCacheKey];
+    } finally {
+        delete infoCache[memoryCacheKey];
+    }
 }
 
 type InstallOptions = {|
