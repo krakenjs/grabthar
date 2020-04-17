@@ -142,6 +142,10 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
                 return true;
             });
 
+            if (!stableVersions.length) {
+                throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
+            }
+
             const previousVersions = stableVersions.filter(ver => {
                 return compareVersions(distTagVersion, ver) === 1;
             });
@@ -149,6 +153,10 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, npm
             const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
 
             if (stability[distTagVersion] === STABILITY.UNSTABLE) {
+                if (!previousVersion) {
+                    throw new Error(`${ name }@${ distTagVersion } and no previous stable version to fall back on`);
+                }
+
                 distTagVersion = previousVersion;
             }
 

@@ -9,7 +9,7 @@ import rmfr from 'rmfr';
 import { exec } from 'npm-run';
 
 import type { CacheType, LoggerType } from './types';
-import { NODE_MODULES, PACKAGE_JSON } from './constants';
+import { NODE_MODULES, PACKAGE_JSON, LOCK } from './constants';
 
 export async function makedir(dir : string) : Promise<void> {
     try {
@@ -271,7 +271,7 @@ export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promi
 
 let locked = false;
 const MAX_LOCK_TIME = 2 * 60 * 1000;
-const LOCK_FILE = join(tmpdir(), 'grabthar.lock');
+const LOCK_FILE = join(tmpdir(), LOCK);
 
 const acquireLock = async () => {
     locked = true;

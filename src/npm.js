@@ -4,14 +4,14 @@
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { ensureDir, move, existsSync, mkdirSync } from 'fs-extra';
+import { ensureDir, move, existsSync, exists, remove, ensureFileSync } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
 import uuid from 'uuid';
 
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
-import { NPM, NODE_MODULES, PACKAGE } from './constants';
+import { NPM, NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
 import { npmRun, sanitizeString,
     stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf, useFileSystemLock } from './util';
 
@@ -188,25 +188,45 @@ export const installSingle = async (moduleName : string, version : string, opts 
         const tmpDir = join(tmpdir(), uuid.v4().slice(10));
         const packageDir = join(tmpDir, PACKAGE);
         const moduleDir = join(nodeModulesDir, moduleInfo.name);
+        const modulePackageDir = join(moduleDir, PACKAGE_JSON);
+        const moduleLock = join(moduleDir, LOCK);
         const moduleParentDir = join(moduleDir, '..');
 
         await ensureDir(tmpDir);
+        await ensureDir(prefix);
         await ensureDir(nodeModulesDir);
         await ensureDir(moduleParentDir);
 
-        if (existsSync(moduleDir)) {
+        if (await exists(modulePackageDir)) {
             return;
         }
 
-        mkdirSync(moduleDir);
+        if (existsSync(moduleLock)) {
+            throw new Error(`${ moduleDir } is locked, can not install ${ moduleName }`);
+        }
+
+        ensureFileSync(moduleLock);
+        const lockTimer = setTimeout(async () => {
+            await remove(moduleLock);
+        }, 60 * 1000);
+
+        if (await exists(moduleDir)) {
+            await rmrf(moduleDir);
+        }
 
         try {
             await ensureDir(moduleDir);
             await download(tarball, tmpDir, { extract: true, filename: packageName });
             await move(packageDir, moduleDir, { overwrite: true });
+            if (!await exists(modulePackageDir)) {
+                throw new Error(`Package not found at ${ modulePackageDir }`);
+            }
         } catch (err) {
             await rmrf(moduleDir);
             throw err;
+        } finally {
+            await remove(moduleLock);
+            clearTimeout(lockTimer);
         }
     })();
 
@@ -248,14 +268,22 @@ export const installFull = async (moduleName : string, version : string, { npmOp
 };
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    const { dependencies = true, flat = false } = opts;
+    const { dependencies = true, flat = false, npmOptions, logger } = opts;
+    const prefix = npmOptions.prefix;
 
     return await useFileSystemLock(async () => {
         if (flat) {
+            if (!prefix) {
+                throw new Error(`NPM prefix required for flat install`);
+            }
+
             try {
                 return await installFlat(moduleName, version, opts);
             } catch (err) {
+                logger.warn('grabthar_install_flat_error_fallback', { err: err.stack || err.toString() });
+
                 if (dependencies) {
+                    await rmrf(prefix);
                     return await installFull(moduleName, version, opts);
                 }
 
