@@ -7,7 +7,7 @@ import { readFile } from 'fs-extra';
 
 import type { LoggerType, CacheType } from './types';
 import { install, type NpmOptionsType, info, type Package, clearCache } from './npm';
-import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion } from './util';
+import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
 
@@ -270,7 +270,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, dependencies, npmOptions, logger, cache });
     }
 
-    async function pollerGet(tag? : string) : Promise<ModuleDetails> {
+    async function withPoller<T>(handler : <T>(ModuleDetails) => Promise<T> | T, tag? : ?string) : Promise<T> {
         if (tag && !pollers[tag]) {
             throw new Error(`Invalid tag: ${ tag }`);
         }
@@ -288,13 +288,13 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         const poller = pollers[tag || DIST_TAG.LATEST];
 
         try {
-            return await poller.result();
+            return await handler(await poller.result());
         } catch (err) {
             logger.warn('grabthar_poll_error_fallback', { err: err.stack || err.toString() });
 
             if (fallback && resolveNodeModulesDirectory(name)) {
                 try {
-                    return await getFallback(name);
+                    return await handler(await getFallback(name));
                 } catch (fallbackErr) {
                     throw new Error(`${ err.stack }\n\nFallback failed:\n\n${ fallbackErr.stack }`);
                 }
@@ -304,17 +304,23 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         }
     }
 
-    async function pollerImport <T : Object>(path = '') : T {
-        const { modulePath } = await pollerGet();
-        // $FlowFixMe
-        return require(join(modulePath, path)); // eslint-disable-line security/detect-non-literal-require
+    async function pollerGet(tag? : ?string) : Promise<ModuleDetails> {
+        return await withPoller(identity, tag);
+    }
+
+    async function pollerImport <T : Object>(path = '') : Promise<T> {
+        return await withPoller(({ modulePath }) => {
+            // $FlowFixMe
+            return require(join(modulePath, path)); // eslint-disable-line security/detect-non-literal-require
+        });
     }
 
     async function pollerRead(path? : string = '') : Promise<string> {
-        const { modulePath } = await pollerGet();
-        const filePath = join(modulePath, path);
-        const file = await readFile(filePath);
-        return file;
+        return await withPoller(async ({ modulePath }) => {
+            const filePath = join(modulePath, path);
+            const file = await readFile(filePath);
+            return file;
+        });
     }
 
     function pollerCancel() {

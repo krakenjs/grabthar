@@ -344,3 +344,7 @@ export async function rmrf(dir : string) : Promise<void> {
 export function isValidDependencyVersion(version : string) : boolean {
     return Boolean(version.match(/^\d+\.\d+\.\d+$/));
 }
+
+export function identity<T>(item : T) : T {
+    return item;
+}
