@@ -234,7 +234,7 @@ export const installSingle = async (moduleName : string, version : string, opts 
 };
 
 export const installFlat = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    const { npmOptions, cache, logger, dependencies = false } = opts;
+    const { npmOptions, cache, logger, dependencies = true } = opts;
 
     const tasks = [
         installSingle(moduleName, version, opts)
