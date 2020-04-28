@@ -7,7 +7,7 @@ import { readFile } from 'fs-extra';
 
 import type { LoggerType, CacheType } from './types';
 import { install, type NpmOptionsType, info, type Package, clearCache } from './npm';
-import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory } from './util';
+import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion } from './util';
 import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
 
@@ -111,6 +111,11 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, dep
             const majorVersion = getMajorVersion(distTagVersion);
 
             const eligibleVersions = moduleVersions.filter(ver => {
+                
+                // Only allow x.x.x versions
+                if (!isValidDependencyVersion(ver)) {
+                    return false;
+                }
 
                 // Do not allow versions that are not the major version of the dist-tag
                 if (getMajorVersion(ver) !== majorVersion) {

@@ -13,7 +13,7 @@ import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT } from './config';
 import { NPM, NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
 import { npmRun, sanitizeString,
-    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf, useFileSystemLock } from './util';
+    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf, useFileSystemLock, isValidDependencyVersion } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -161,6 +161,11 @@ type InstallOptions = {|
 const installSingleCache : { [string] : Promise<void> } = {};
 
 export const installSingle = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
+
+    if (!isValidDependencyVersion(version)) {
+        throw new Error(`Invalid version for single install: ${ moduleName }@${ version }`);
+    }
+
     const { npmOptions = getDefaultNpmOptions(), cache, logger } = opts;
     const installSingleMemoryCacheKey = JSON.stringify({ moduleName, version, npmOptions });
 
@@ -236,18 +241,26 @@ export const installSingle = async (moduleName : string, version : string, opts 
 export const installFlat = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
     const { npmOptions, cache, logger, dependencies = true } = opts;
 
-    const tasks = [
-        installSingle(moduleName, version, opts)
-    ];
+    const tasks = [];
 
     if (dependencies) {
         const moduleInfo = await info(moduleName, { npmOptions, cache, logger });
         const dependencyVersions = moduleInfo.versions[version].dependencies;
+
+        for (const dependencyName of Object.keys(dependencyVersions)) {
+            const dependencyVersion = dependencyVersions[dependencyName];
+            if (!isValidDependencyVersion(dependencyVersion)) {
+                throw new Error(`Invalid dependency version for flat single install: ${ dependencyName }@${ dependencyVersion }`);
+            }
+        }
+
         for (const dependencyName of Object.keys(dependencyVersions)) {
             const dependencyVersion = dependencyVersions[dependencyName];
             tasks.push(installSingle(dependencyName, dependencyVersion, opts));
         }
     }
+
+    tasks.push(installSingle(moduleName, version, opts));
 
     await Promise.all(tasks);
 };
