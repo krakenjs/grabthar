@@ -3,6 +3,7 @@
 import { join } from 'path';
 
 import compareVersions from 'compare-versions';
+import LRU from 'lru-cache';
 import { readFile } from 'fs-extra';
 
 import type { LoggerType, CacheType } from './types';
@@ -315,10 +316,17 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         });
     }
 
+    const readCache = new LRU(20);
+
     async function pollerRead(path? : string = '') : Promise<string> {
+        if (readCache.has(path)) {
+            return readCache.get(path);
+        }
+
         return await withPoller(async ({ modulePath }) => {
             const filePath = join(modulePath, path);
             const file = await readFile(filePath);
+            readCache.set(path, file);
             return file;
         });
     }
