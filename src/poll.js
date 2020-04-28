@@ -285,6 +285,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         try {
             return await poller.result();
         } catch (err) {
+            logger.warn('grabthar_poll_error_fallback', { err: err.stack || err.toString() });
 
             if (fallback && resolveNodeModulesDirectory(name)) {
                 try {
