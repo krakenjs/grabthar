@@ -319,14 +319,13 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     const readCache = new LRU(20);
 
     async function pollerRead(path? : string = '') : Promise<string> {
-        if (readCache.has(path)) {
-            return readCache.get(path);
-        }
-
         return await withPoller(async ({ modulePath }) => {
             const filePath = join(modulePath, path);
+            if (readCache.has(filePath)) {
+                return readCache.get(filePath);
+            }
             const file = await readFile(filePath);
-            readCache.set(path, file);
+            readCache.set(filePath, file);
             return file;
         });
     }
