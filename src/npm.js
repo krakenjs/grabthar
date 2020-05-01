@@ -158,8 +158,6 @@ type InstallOptions = {|
     flat? : boolean
 |};
 
-const installSingleCache : { [string] : Promise<void> } = {};
-
 export const installSingle = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
 
     if (!isValidDependencyVersion(version)) {
@@ -167,75 +165,70 @@ export const installSingle = async (moduleName : string, version : string, opts 
     }
 
     const { npmOptions = getDefaultNpmOptions(), cache, logger } = opts;
-    const installSingleMemoryCacheKey = JSON.stringify({ moduleName, version, npmOptions });
 
-    installSingleCache[installSingleMemoryCacheKey] = installSingleCache[installSingleMemoryCacheKey] || (async () => {
-        const moduleInfo = await info(moduleName, { npmOptions, cache, logger });
+    const moduleInfo = await info(moduleName, { npmOptions, cache, logger });
 
-        const versionInfo = moduleInfo.versions[version];
-        const tarball = versionInfo.dist.tarball;
-        const { prefix, registry } = npmOptions;
+    const versionInfo = moduleInfo.versions[version];
+    const tarball = versionInfo.dist.tarball;
+    const { prefix, registry } = npmOptions;
 
-        if (!prefix) {
-            throw new Error(`Prefix required for flat install`);
+    if (!prefix) {
+        throw new Error(`Prefix required for flat install`);
+    }
+
+    if (!tarball) {
+        throw new Error(`Can not find tarball for ${ moduleInfo.name }`);
+    }
+
+    const sanitizedName = sanitizeString(moduleName);
+    logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { version, registry, prefix });
+
+    const nodeModulesDir = join(prefix, NODE_MODULES);
+    const packageName = `${ PACKAGE }.tar.gz`;
+
+    const tmpDir = join(tmpdir(), uuid.v4().slice(10));
+    const packageDir = join(tmpDir, PACKAGE);
+    const moduleDir = join(nodeModulesDir, moduleInfo.name);
+    const modulePackageDir = join(moduleDir, PACKAGE_JSON);
+    const moduleLock = join(moduleDir, LOCK);
+    const moduleParentDir = join(moduleDir, '..');
+
+    await ensureDir(tmpDir);
+    await ensureDir(prefix);
+    await ensureDir(nodeModulesDir);
+    await ensureDir(moduleParentDir);
+
+    if (await exists(modulePackageDir)) {
+        return;
+    }
+
+    if (existsSync(moduleLock)) {
+        throw new Error(`${ moduleDir } is locked, can not install ${ moduleName }`);
+    }
+
+    ensureFileSync(moduleLock);
+    const lockTimer = setTimeout(async () => {
+        await remove(moduleLock);
+    }, 60 * 1000);
+
+    if (await exists(moduleDir)) {
+        await rmrf(moduleDir);
+    }
+
+    try {
+        await ensureDir(moduleDir);
+        await download(tarball, tmpDir, { extract: true, filename: packageName });
+        await move(packageDir, moduleDir, { overwrite: true });
+        if (!await exists(modulePackageDir)) {
+            throw new Error(`Package not found at ${ modulePackageDir }`);
         }
-
-        if (!tarball) {
-            throw new Error(`Can not find tarball for ${ moduleInfo.name }`);
-        }
-
-        const sanitizedName = sanitizeString(moduleName);
-        logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { version, registry, prefix });
-
-        const nodeModulesDir = join(prefix, NODE_MODULES);
-        const packageName = `${ PACKAGE }.tar.gz`;
-
-        const tmpDir = join(tmpdir(), uuid.v4().slice(10));
-        const packageDir = join(tmpDir, PACKAGE);
-        const moduleDir = join(nodeModulesDir, moduleInfo.name);
-        const modulePackageDir = join(moduleDir, PACKAGE_JSON);
-        const moduleLock = join(moduleDir, LOCK);
-        const moduleParentDir = join(moduleDir, '..');
-
-        await ensureDir(tmpDir);
-        await ensureDir(prefix);
-        await ensureDir(nodeModulesDir);
-        await ensureDir(moduleParentDir);
-
-        if (await exists(modulePackageDir)) {
-            return;
-        }
-
-        if (existsSync(moduleLock)) {
-            throw new Error(`${ moduleDir } is locked, can not install ${ moduleName }`);
-        }
-
-        ensureFileSync(moduleLock);
-        const lockTimer = setTimeout(async () => {
-            await remove(moduleLock);
-        }, 60 * 1000);
-
-        if (await exists(moduleDir)) {
-            await rmrf(moduleDir);
-        }
-
-        try {
-            await ensureDir(moduleDir);
-            await download(tarball, tmpDir, { extract: true, filename: packageName });
-            await move(packageDir, moduleDir, { overwrite: true });
-            if (!await exists(modulePackageDir)) {
-                throw new Error(`Package not found at ${ modulePackageDir }`);
-            }
-        } catch (err) {
-            await rmrf(moduleDir);
-            throw err;
-        } finally {
-            await remove(moduleLock);
-            clearTimeout(lockTimer);
-        }
-    })();
-
-    return await installSingleCache[installSingleMemoryCacheKey];
+    } catch (err) {
+        await rmrf(moduleDir);
+        throw err;
+    } finally {
+        await remove(moduleLock);
+        clearTimeout(lockTimer);
+    }
 };
 
 export const installFlat = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
@@ -265,19 +258,26 @@ export const installFlat = async (moduleName : string, version : string, opts : 
     await Promise.all(tasks);
 };
 
-const installCache : { [string] : Promise<void> } = {};
-
 export const installFull = async (moduleName : string, version : string, { npmOptions = getDefaultNpmOptions(), logger } : InstallOptions) : Promise<void> => {
-    const installMemoryCacheKey = JSON.stringify({ moduleName, version, npmOptions });
+    const { registry, prefix } = npmOptions;
 
-    installCache[installMemoryCacheKey] = installCache[installMemoryCacheKey] || (async () => {
-        const { registry, prefix } = npmOptions;
-        const sanitizedName = sanitizeString(moduleName);
-        logger.info(`grabthar_npm_install_${ sanitizedName }`, { version, registry, prefix });
-        await npm('install', [ `${ moduleName }@${ version }` ], npmOptions);
-    })();
+    if (!prefix) {
+        throw new Error(`Prefix required for flat install`);
+    }
 
-    return await installCache[installMemoryCacheKey];
+    const sanitizedName = sanitizeString(moduleName);
+    logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { version, registry, prefix });
+
+    const nodeModulesDir = join(prefix, NODE_MODULES);
+    const moduleDir = join(nodeModulesDir, moduleName);
+    const modulePackageDir = join(moduleDir, PACKAGE_JSON);
+
+    if (await exists(modulePackageDir)) {
+        return;
+    }
+
+    logger.info(`grabthar_npm_install_${ sanitizedName }`, { version, registry, prefix });
+    await npm('install', [ `${ moduleName }@${ version }` ], npmOptions);
 };
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
@@ -313,6 +313,4 @@ export const install = async (moduleName : string, version : string, opts : Inst
 export function clearCache() {
     clearObject(verifyCache);
     clearObject(infoCache);
-    clearObject(installSingleCache);
-    clearObject(installCache);
 }

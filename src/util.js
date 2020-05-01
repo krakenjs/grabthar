@@ -4,7 +4,7 @@ import { join } from 'path';
 import { homedir, tmpdir } from 'os';
 import { lookup } from 'dns';
 
-import { mkdir, exists, readFile, remove, writeFile } from 'fs-extra';
+import { mkdir, exists, readFile, removeSync, writeFileSync, existsSync } from 'fs-extra';
 import rmfr from 'rmfr';
 import { exec } from 'npm-run';
 
@@ -273,18 +273,18 @@ let locked = false;
 const MAX_LOCK_TIME = 2 * 60 * 1000;
 const LOCK_FILE = join(tmpdir(), LOCK);
 
-const acquireLock = async () => {
+const acquireLock = () => {
     locked = true;
-    await writeFile(LOCK_FILE, parseInt(Date.now(), 10).toString());
+    writeFileSync(LOCK_FILE, parseInt(Date.now(), 10).toString());
 };
 
-const releaseLock = async () => {
+const releaseLock = () => {
     locked = false;
-    await remove(LOCK_FILE);
+    removeSync(LOCK_FILE);
 };
 
-const isLocked = async () => {
-    return locked || await exists(LOCK_FILE);
+const isLocked = () => {
+    return locked || existsSync(LOCK_FILE);
 };
 
 const getLockTime = async () : Promise<number> => {
@@ -296,29 +296,29 @@ const getLockTime = async () : Promise<number> => {
 export async function useFileSystemLock<T>(task : () => Promise<T>) : Promise<T> {
     const startTime = parseInt(Date.now(), 10);
     
-    while (await isLocked()) {
+    while (isLocked()) {
         const time = await getLockTime();
         
         if ((startTime - time) > MAX_LOCK_TIME) {
-            await releaseLock();
+            releaseLock();
         } else {
-            await sleep(1000);
+            await sleep(500);
             continue;
         }
     }
 
     let result;
 
-    await acquireLock();
+    acquireLock();
 
     try {
         result = await task();
     } catch (err) {
-        await await releaseLock();
+        releaseLock();
         throw err;
     }
 
-    await releaseLock();
+    releaseLock();
 
     return result;
 }

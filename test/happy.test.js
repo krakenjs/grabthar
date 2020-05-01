@@ -12,6 +12,7 @@ beforeEach(() => {
 
     nock('https://registry.npmjs.org')
         .get(`/info`)
+        .times(Infinity)
         .reply(200, {});
 });
 
