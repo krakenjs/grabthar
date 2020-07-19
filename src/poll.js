@@ -34,14 +34,15 @@ type InstallVersionOptions = {|
     dependencies? : boolean,
     npmOptions : NpmOptionsType,
     logger : LoggerType,
-    cache : ?CacheType
+    cache : ?CacheType,
+    cdnRegistry : ?string
 |};
 
-async function installVersion({ moduleInfo, version, flat = false, dependencies = true, npmOptions = {}, logger, cache } : InstallVersionOptions) : Promise<InstallResult> {
+async function installVersion({ moduleInfo, version, flat = false, dependencies = true, npmOptions = {}, logger, cache, cdnRegistry } : InstallVersionOptions) : Promise<InstallResult> {
     const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
 
     npmOptions = { ...npmOptions, prefix: newRoot };
-    await install(moduleInfo.name, version, { npmOptions, logger, cache, flat, dependencies });
+    await install(moduleInfo.name, version, { npmOptions, logger, cache, flat, dependencies, cdnRegistry });
     
     const nodeModulesPath = join(newRoot, NODE_MODULES);
     const modulePath = join(nodeModulesPath, moduleInfo.name);
@@ -86,8 +87,20 @@ function getMajorVersion(version : string) : string {
     return version.split('.')[0];
 }
 
-function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, dependencies = true, npmOptions = {}, logger, cache } :
-    {| name : string, tag : string, onError : ?(Error) => void, period? : number, flat? : boolean, dependencies? : boolean, npmOptions : NpmOptionsType, logger : LoggerType, cache : ?CacheType |}) : DistPoller {
+type PollInstallDistTagOptions = {|
+    name : string,
+    tag : string,
+    onError : ?(Error) => void,
+    period? : number,
+    flat? : boolean,
+    dependencies? : boolean,
+    npmOptions : NpmOptionsType,
+    logger : LoggerType,
+    cache : ?CacheType,
+    cdnRegistry : ?string
+|};
+
+function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, dependencies = true, npmOptions = {}, logger, cache, cdnRegistry } : PollInstallDistTagOptions) : DistPoller {
     
     const stability : { [string] : string } = {};
 
@@ -95,7 +108,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, dep
 
     const poller = poll({
         handler: async () => {
-            const moduleInfo = await info(name, { logger, cache, npmOptions });
+            const moduleInfo = await info(name, { logger, cache, npmOptions, cdnRegistry });
 
             let distTagVersion = moduleInfo[DIST_TAGS][tag];
 
@@ -169,7 +182,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, dep
             if (!installedModule || installedModule.version !== distTagVersion) {
                 const version = distTagVersion;
                 const { nodeModulesPath, modulePath, dependencies: moduleDependencies } = await installVersion({
-                    moduleInfo, version, flat, dependencies, npmOptions, logger, cache
+                    moduleInfo, version, flat, dependencies, npmOptions, logger, cache, cdnRegistry
                 });
 
                 installedModule = {
@@ -217,7 +230,8 @@ type NPMPollOptions = {|
     flat? : boolean,
     fallback? : boolean,
     logger? : LoggerType,
-    cache? : CacheType
+    cache? : CacheType,
+    cdnRegistry? : string
 |};
 
 export const defaultLogger : LoggerType = {
@@ -263,12 +277,12 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
     };
 }
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, logger = defaultLogger, cache, flat = false, dependencies = true, npmOptions = {}, fallback = true } : NPMPollOptions) : NpmWatcher<Object> {
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, logger = defaultLogger, cache, flat = false, dependencies = true, npmOptions = {}, fallback = true, cdnRegistry } : NPMPollOptions) : NpmWatcher<Object> {
 
     const pollers = {};
 
     for (const tag of tags) {
-        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, dependencies, npmOptions, logger, cache });
+        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, dependencies, npmOptions, logger, cache, cdnRegistry });
     }
 
     async function withPoller<T>(handler : <T>(ModuleDetails) => Promise<T> | T, tag? : ?string) : Promise<T> {
