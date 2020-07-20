@@ -216,6 +216,7 @@ type NpmWatcher<T : Object> = {|
     get : (tag? : string) => Promise<ModuleDetails>,
     read : (path? : string) => Promise<string>,
     import : (?string) => Promise<T>,
+    importDependency : (string, ?string) => Promise<T>,
     cancel : () => void,
     markStable : (string) => void,
     markUnstable : (string) => void
@@ -330,6 +331,13 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         });
     }
 
+    async function pollerImportDependency <T : Object>(dependencyName, path = '') : Promise<T> {
+        return await withPoller(async ({ modulePath }) => {
+            // $FlowFixMe
+            return require(join(await resolveNodeModulesDirectory(modulePath), dependencyName, path)); // eslint-disable-line security/detect-non-literal-require
+        });
+    }
+
     const readCache = new LRU(20);
 
     async function pollerRead(path? : string = '') : Promise<string> {
@@ -363,12 +371,13 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     }
 
     return {
-        get:          pollerGet,
-        import:       pollerImport,
-        read:         pollerRead,
-        cancel:       pollerCancel,
-        markStable:   pollerMarkStable,
-        markUnstable: pollerMarkUnstable
+        get:              pollerGet,
+        import:           pollerImport,
+        importDependency: pollerImportDependency,
+        read:             pollerRead,
+        cancel:           pollerCancel,
+        markStable:       pollerMarkStable,
+        markUnstable:     pollerMarkUnstable
     };
 }
 
