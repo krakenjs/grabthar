@@ -302,7 +302,7 @@ export const installFull = async (moduleName : string, version : string, { npmOp
 };
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    const { dependencies = true, flat = false, npmOptions, logger } = opts;
+    const { dependencies = true, flat = false, npmOptions, logger, cdnRegistry } = opts;
     const prefix = npmOptions.prefix;
 
     return await useFileSystemLock(async () => {
@@ -316,7 +316,7 @@ export const install = async (moduleName : string, version : string, opts : Inst
             } catch (err) {
                 logger.warn('grabthar_install_flat_error_fallback', { err: err.stack || err.toString() });
 
-                if (dependencies) {
+                if (dependencies && !cdnRegistry) {
                     await rmrf(prefix);
                     return await installFull(moduleName, version, opts);
                 }
