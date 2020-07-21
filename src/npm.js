@@ -131,13 +131,24 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
         logger.info(`grabthar_npm_info_${ sanitizedName }`, { registry });
 
         const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
-            const infoUrl = cdnRegistry
-                ? `${ cdnRegistry }/${ moduleName }/${ CDN_REGISTRY_INFO_FILENAME }?cache-bust=${ Math.floor(Date.now() / CDN_REGISTRY_INFO_CACHEBUST_URL_TIME) }`
-                : `${ registry }/${ moduleName }`;
 
-            const res = await fetch(infoUrl);
+            let res;
 
-            if (res.status !== 200) {
+            if (cdnRegistry) {
+                res = await fetch(`${ cdnRegistry }/${ moduleName.replace('@', '') }/${ CDN_REGISTRY_INFO_FILENAME }?cache-bust=${ Math.floor(Date.now() / CDN_REGISTRY_INFO_CACHEBUST_URL_TIME) }`);
+                if (!res.ok) {
+                    logger.info(`grabthar_cdn_registry_failure`, {
+                        cdnRegistry, moduleName, status: res.status
+                    });
+                    res = null;
+                }
+            }
+
+            if (!res) {
+                res = await fetch(`${ registry }/${ moduleName }`);
+            }
+
+            if (!res.ok) {
                 throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
             }
 
