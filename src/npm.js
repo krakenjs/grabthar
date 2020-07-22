@@ -127,7 +127,9 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
 
     infoCache[memoryCacheKey] = infoCache[memoryCacheKey] || (async () => {
         const sanitizedName = sanitizeString(moduleName);
-        const cacheKey = `grabthar_npm_info_${ sanitizedName }`;
+        const sanitizedCDNRegistry = sanitizeString(cdnRegistry || 'npm');
+
+        const cacheKey = `grabthar_npm_info_${ sanitizedName }_${ sanitizedCDNRegistry }`;
         logger.info(`grabthar_npm_info_${ sanitizedName }`, { registry });
 
         const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
