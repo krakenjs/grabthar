@@ -7,9 +7,9 @@ import LRU from 'lru-cache';
 import { readFile } from 'fs-extra';
 
 import type { LoggerType, CacheType } from './types';
-import { install, type NpmOptionsType, info, type Package, clearCache } from './npm';
+import { install, info, type Package, clearCache } from './npm';
 import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity } from './util';
-import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL } from './config';
+import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
 
 type InstallResult = {|
@@ -30,19 +30,17 @@ function cleanName(name : string) : string {
 type InstallVersionOptions = {|
     moduleInfo : Package,
     version : string,
-    flat? : boolean,
     dependencies? : boolean,
-    npmOptions : NpmOptionsType,
     logger : LoggerType,
     cache : ?CacheType,
+    registry : string,
     cdnRegistry : ?string
 |};
 
-async function installVersion({ moduleInfo, version, flat = false, dependencies = true, npmOptions = {}, logger, cache, cdnRegistry } : InstallVersionOptions) : Promise<InstallResult> {
+async function installVersion({ moduleInfo, version, dependencies = false, registry = NPM_REGISTRY, logger, cache, cdnRegistry } : InstallVersionOptions) : Promise<InstallResult> {
     const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
 
-    npmOptions = { ...npmOptions, prefix: newRoot };
-    await install(moduleInfo.name, version, { npmOptions, logger, cache, flat, dependencies, cdnRegistry });
+    await install(moduleInfo.name, version, { logger, cache, dependencies, registry, cdnRegistry, prefix: newRoot });
     
     const nodeModulesPath = join(newRoot, NODE_MODULES);
     const modulePath = join(nodeModulesPath, moduleInfo.name);
@@ -68,6 +66,7 @@ type ModuleDetails = {|
     nodeModulesPath : string,
     modulePath : string,
     version : string,
+    previousVersion : string,
     dependencies : {
         [string] : {|
             version : string,
@@ -92,117 +91,112 @@ type PollInstallDistTagOptions = {|
     tag : string,
     onError : ?(Error) => void,
     period? : number,
-    flat? : boolean,
     dependencies? : boolean,
-    npmOptions : NpmOptionsType,
     logger : LoggerType,
     cache : ?CacheType,
+    registry : string,
     cdnRegistry : ?string
 |};
 
-function pollInstallDistTag({ name, onError, tag, period = 20, flat = false, dependencies = true, npmOptions = {}, logger, cache, cdnRegistry } : PollInstallDistTagOptions) : DistPoller {
+function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = false, logger, cache, registry = NPM_REGISTRY, cdnRegistry } : PollInstallDistTagOptions) : DistPoller {
     
     const stability : { [string] : string } = {};
 
-    let installedModule;
+    const pollInstall = async () : Promise<ModuleDetails> => {
+        const moduleInfo = await info(name, { logger, cache, registry, cdnRegistry });
+
+        let distTagVersion = moduleInfo[DIST_TAGS][tag];
+
+        if (!distTagVersion) {
+            throw new Error(`No ${ tag } tag found for ${ name } - ${ JSON.stringify(moduleInfo[DIST_TAGS]) }`);
+        }
+
+        const moduleVersions = Object.keys(moduleInfo.versions)
+            .filter(ver => ver.match(/^\d+\.\d+\.\d+$/))
+            .sort(compareVersions)
+            .reverse();
+
+        stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
+        const majorVersion = getMajorVersion(distTagVersion);
+
+        const eligibleVersions = moduleVersions.filter(ver => {
+                
+            // Only allow x.x.x versions
+            if (!isValidDependencyVersion(ver)) {
+                return false;
+            }
+
+            // Do not allow versions that are not the major version of the dist-tag
+            if (getMajorVersion(ver) !== majorVersion) {
+                return false;
+            }
+
+            // Do not allow versions ahead of the current dist-tag
+            if (compareVersions(ver, distTagVersion) === 1) {
+                return false;
+            }
+
+            // Do not allow versions marked as unstable
+            if (stability[ver] === STABILITY.UNSTABLE) {
+                return false;
+            }
+
+            return true;
+        });
+
+        if (!eligibleVersions.length) {
+            throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
+        }
+
+        const stableVersions = eligibleVersions.filter(ver => {
+            if (stability[ver] === STABILITY.UNSTABLE) {
+                return false;
+            }
+
+            return true;
+        });
+
+        if (!stableVersions.length) {
+            throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
+        }
+
+        const previousVersions = stableVersions.filter(ver => {
+            return compareVersions(distTagVersion, ver) === 1;
+        });
+            
+        const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
+
+        if (stability[distTagVersion] === STABILITY.UNSTABLE) {
+            if (!previousVersion) {
+                throw new Error(`${ name }@${ distTagVersion } and no previous stable version to fall back on`);
+            }
+
+            distTagVersion = previousVersion;
+        }
+
+        const version = distTagVersion;
+        const { nodeModulesPath, modulePath, dependencies: moduleDependencies } = await installVersion({
+            moduleInfo, version, dependencies, registry, logger, cache, cdnRegistry
+        });
+
+        return {
+            nodeModulesPath,
+            modulePath,
+            version,
+            previousVersion,
+            dependencies: moduleDependencies
+        };
+    };
 
     const poller = poll({
-        handler: async () => {
-            const moduleInfo = await info(name, { logger, cache, npmOptions, cdnRegistry });
-
-            let distTagVersion = moduleInfo[DIST_TAGS][tag];
-
-            if (!distTagVersion) {
-                throw new Error(`No ${ tag } tag found for ${ name } - ${ JSON.stringify(moduleInfo[DIST_TAGS]) }`);
-            }
-
-            const moduleVersions = Object.keys(moduleInfo.versions)
-                .filter(ver => ver.match(/^\d+\.\d+\.\d+$/))
-                .sort(compareVersions)
-                .reverse();
-
-            stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
-            const majorVersion = getMajorVersion(distTagVersion);
-
-            const eligibleVersions = moduleVersions.filter(ver => {
-                
-                // Only allow x.x.x versions
-                if (!isValidDependencyVersion(ver)) {
-                    return false;
-                }
-
-                // Do not allow versions that are not the major version of the dist-tag
-                if (getMajorVersion(ver) !== majorVersion) {
-                    return false;
-                }
-
-                // Do not allow versions ahead of the current dist-tag
-                if (compareVersions(ver, distTagVersion) === 1) {
-                    return false;
-                }
-
-                // Do not allow versions marked as unstable
-                if (stability[ver] === STABILITY.UNSTABLE) {
-                    return false;
-                }
-
-                return true;
-            });
-
-            if (!eligibleVersions.length) {
-                throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
-            }
-
-            const stableVersions = eligibleVersions.filter(ver => {
-                if (stability[ver] === STABILITY.UNSTABLE) {
-                    return false;
-                }
-
-                return true;
-            });
-
-            if (!stableVersions.length) {
-                throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
-            }
-
-            const previousVersions = stableVersions.filter(ver => {
-                return compareVersions(distTagVersion, ver) === 1;
-            });
-            
-            const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
-
-            if (stability[distTagVersion] === STABILITY.UNSTABLE) {
-                if (!previousVersion) {
-                    throw new Error(`${ name }@${ distTagVersion } and no previous stable version to fall back on`);
-                }
-
-                distTagVersion = previousVersion;
-            }
-
-            if (!installedModule || installedModule.version !== distTagVersion) {
-                const version = distTagVersion;
-                const { nodeModulesPath, modulePath, dependencies: moduleDependencies } = await installVersion({
-                    moduleInfo, version, flat, dependencies, npmOptions, logger, cache, cdnRegistry
-                });
-
-                installedModule = {
-                    nodeModulesPath,
-                    modulePath,
-                    version,
-                    previousVersion,
-                    dependencies: moduleDependencies
-                };
-            }
-
-            return installedModule;
-        },
-        period: period * 1000,
+        handler: pollInstall,
+        period:  period * 1000,
         onError
     }).start();
 
     return {
         stop:       () => { poller.stop(); },
-        result:     async () => await poller.result(),
+        result:     pollInstall,
         markStable: (version : string) => {
             stability[version] = STABILITY.STABLE;
         },
@@ -227,12 +221,12 @@ type NPMPollOptions = {|
     tags? : $ReadOnlyArray<string>,
     onError? : (Error) => void,
     period? : number,
-    npmOptions? : NpmOptionsType,
-    flat? : boolean,
     fallback? : boolean,
     logger? : LoggerType,
     cache? : CacheType,
-    cdnRegistry? : string
+    registry? : string,
+    cdnRegistry? : string,
+    dependencies? : boolean
 |};
 
 export const defaultLogger : LoggerType = {
@@ -274,16 +268,17 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
         nodeModulesPath,
         modulePath,
         version,
+        previousVersion: version,
         dependencies
     };
 }
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, logger = defaultLogger, cache, flat = false, dependencies = true, npmOptions = {}, fallback = true, cdnRegistry } : NPMPollOptions) : NpmWatcher<Object> {
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, registry = NPM_REGISTRY, logger = defaultLogger, cache, dependencies = false, fallback = true, cdnRegistry } : NPMPollOptions) : NpmWatcher<Object> {
 
     const pollers = {};
 
     for (const tag of tags) {
-        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, flat, dependencies, npmOptions, logger, cache, cdnRegistry });
+        pollers[tag] = pollInstallDistTag({ name, tag, onError, period, dependencies, registry, logger, cache, cdnRegistry });
     }
 
     async function withPoller<T>(handler : <T>(ModuleDetails) => Promise<T> | T, tag? : ?string) : Promise<T> {

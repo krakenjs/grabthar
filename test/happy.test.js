@@ -1,26 +1,51 @@
 /* @flow */
 /* eslint import/order: 0, max-lines: 0 */
 
-import nock from 'nock';
+import { homedir } from 'os';
+import { join } from 'path';
 
-import { mockExec, checkNpmOptions, wrapPromise } from './lib';
+import nock from 'nock';
+import { test, expect } from '@jest/globals';
+import { exists } from 'fs-extra';
+import rmfr from 'rmfr';
+
+import { wrapPromise, entries } from './lib';
 
 import { poll } from '../src';
 
-beforeEach(() => {
-    poll.flushCache();
+const logger = {
+    debug: () => {
+        // pass
+    },
+    info:  () => {
+        // pass
+    },
+    warn:  () => {
+        // pass
+    },
+    error: () => {
+        // pass
+    }
+};
 
-    nock('https://registry.npmjs.org')
-        .get(`/info`)
-        .times(Infinity)
-        .reply(200, {});
+const MODULE_NAME = 'grabthar-test-module';
+const MODULE_VERSION = '1.3.53';
+
+const __LIVE_MODULES__ = '__live_modules__';
+const NODE_MODULES = 'node_modules';
+
+beforeEach(async () => {
+    poll.flushCache();
+    nock.cleanAll();
+    await rmfr(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`));
 });
 
 test(`Should poll for a module and install it, then return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
+        const REGISTRY = 'https://registry.npmjs.org';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
             bar: '56.0.3',
@@ -35,71 +60,65 @@ test(`Should poll for a module and install it, then return the correct latest ve
             'versions': {
                 [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
                 }
             }
         };
 
-        const exec = mockExec();
-
-        const getReq = nock('https://registry.npmjs.org')
+        const infoReq = nock(REGISTRY)
             .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
+            .reply(200, info)
+            .persist();
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
         const poller = poll({
-            name:    MODULE_NAME,
-            onError: reject
+            name:         MODULE_NAME,
+            onError:      reject,
+            logger
         });
 
-        getReq.done();
+        const result = await poller.get();
+        await poller.cancel();
 
-        const next = await exec.next();
-        checkNpmOptions(next.cmd);
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
         }
 
-        const { prefix } = next.cmd.opts;
-
-        if (!prefix) {
-            throw new Error(`Expected npm install to pass prefix`);
-        }
-
-        await next.res(JSON.stringify({}));
-
-        const { version, dependencies } = await poller.get();
-
-        if (version !== MODULE_VERSION) {
-            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
-        }
-
-        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        const actualDependencyNumbber = Object.keys(dependencies).length;
-
-        if (expectedDependencyNumber !== actualDependencyNumbber) {
-            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
-        }
-
-        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            const actualVersion = dependencies[dependencyName].version;
-
-            if (expectedVersion !== actualVersion) {
-                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
-            }
-        }
-
-        exec.cancel();
-        poller.cancel();
+        infoReq.done();
+        tarballReq.done();
     });
 });
 
-test(`Should poll for a module and install it, then explicitly return the correct latest version`, async () => {
+test(`Should poll for a module on a custom registry and install it, then return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
+        const REGISTRY = 'https://npm.paypal.com';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
             bar: '56.0.3',
@@ -107,79 +126,74 @@ test(`Should poll for a module and install it, then explicitly return the correc
         };
 
         const info = {
-            'name':      MODULE_NAME,
+            'name':        MODULE_NAME,
             'dist-tags': {
-                latest: MODULE_VERSION
+                latest:  MODULE_VERSION
             },
             'versions': {
-                [MODULE_VERSION]: {
+                [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
                 }
             }
-
         };
 
-        const exec = mockExec();
-
-        const getReq = nock('https://registry.npmjs.org')
+        const infoReq = nock(REGISTRY)
             .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
+            .reply(200, info)
+            .persist();
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
         const poller = poll({
-            name:    MODULE_NAME,
-            onError: reject
+            name:         MODULE_NAME,
+            onError:      reject,
+            registry:     REGISTRY,
+            logger
         });
 
-        getReq.done();
+        const result = await poller.get();
+        await poller.cancel();
 
-        const next = await exec.next();
-        checkNpmOptions(next.cmd);
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
         }
 
-        const { prefix } = next.cmd.opts;
-
-        if (!prefix) {
-            throw new Error(`Expected npm install to pass prefix`);
-        }
-
-        await next.res(JSON.stringify({}));
-
-        const { version, dependencies } = await poller.get('latest');
-
-        if (version !== MODULE_VERSION) {
-            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
-        }
-
-        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        const actualDependencyNumbber = Object.keys(dependencies).length;
-
-        if (expectedDependencyNumber !== actualDependencyNumbber) {
-            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
-        }
-
-        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            const actualVersion = dependencies[dependencyName].version;
-
-            if (expectedVersion !== actualVersion) {
-                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
-            }
-        }
-
-        exec.cancel();
-        poller.cancel();
+        infoReq.done();
+        tarballReq.done();
     });
 });
 
-test(`Should poll for a module and install it, then return the correct release version`, async () => {
+test(`Should poll for a module on a cdn registry and install it, then return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
+        const CDN_PATH = 'foo';
+        const REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
             bar: '56.0.3',
@@ -187,160 +201,80 @@ test(`Should poll for a module and install it, then return the correct release v
         };
 
         const info = {
-            'name':      MODULE_NAME,
+            'name':        MODULE_NAME,
             'dist-tags': {
-                latest: MODULE_VERSION
+                latest:  MODULE_VERSION
             },
             'versions': {
-                [MODULE_VERSION]: {
+                [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
-                }
-            }
-
-        };
-
-        const exec = mockExec();
-
-        const getReq = nock('https://registry.npmjs.org')
-            .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
-
-        const poller = poll({
-            name:    MODULE_NAME,
-            onError: reject
-        });
-
-        getReq.done();
-
-        const next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        const { prefix } = next.cmd.opts;
-
-        if (!prefix) {
-            throw new Error(`Expected npm install to pass prefix`);
-        }
-
-        await next.res(JSON.stringify({}));
-
-        const { version, dependencies } = await poller.get();
-
-        if (version !== MODULE_VERSION) {
-            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
-        }
-
-        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        const actualDependencyNumbber = Object.keys(dependencies).length;
-
-        if (expectedDependencyNumber !== actualDependencyNumbber) {
-            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
-        }
-
-        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            const actualVersion = dependencies[dependencyName].version;
-
-            if (expectedVersion !== actualVersion) {
-                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
-            }
-        }
-
-        exec.cancel();
-        poller.cancel();
-    });
-});
-
-test(`Should poll for a module and install it, then explicitly return the correct release version`, async () => {
-    await wrapPromise(async (reject) => {
-
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
-        const MODULE_DEPENDENCIES = {
-            foo: '1.2.3',
-            bar: '56.0.3',
-            baz: '6.12.99'
-        };
-
-        const info = {
-            'name':      MODULE_NAME,
-            'dist-tags': {
-                latest:  '1.3.57',
-                release: MODULE_VERSION
-            },
-            'versions': {
-                [MODULE_VERSION]: {
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
                 }
             }
         };
 
-        const exec = mockExec();
+        const infoReq = nock(REGISTRY)
+            .get(`/${ MODULE_NAME }/info.json`)
+            .query(keys => {
+                if (keys['cache-bust']) {
+                    return true;
+                } else {
+                    return false;
+                }
+            })
+            .reply(200, info)
+            .persist();
 
-        const getReq = nock('https://registry.npmjs.org')
-            .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
         const poller = poll({
-            tags:    [ 'release' ],
-            name:    MODULE_NAME,
-            onError: reject
+            name:         MODULE_NAME,
+            onError:      reject,
+            cdnRegistry:  REGISTRY,
+            logger
         });
 
-        getReq.done();
+        const result = await poller.get();
+        await poller.cancel();
 
-        const next = await exec.next();
-        checkNpmOptions(next.cmd);
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
         }
 
-        const { prefix } = next.cmd.opts;
-
-        if (!prefix) {
-            throw new Error(`Expected npm install to pass prefix`);
-        }
-
-        await next.res(JSON.stringify({}));
-
-        const { version, dependencies } = await poller.get('release');
-
-        if (version !== MODULE_VERSION) {
-            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
-        }
-
-        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        const actualDependencyNumbber = Object.keys(dependencies).length;
-
-        if (expectedDependencyNumber !== actualDependencyNumbber) {
-            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
-        }
-
-        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            const actualVersion = dependencies[dependencyName].version;
-
-            if (expectedVersion !== actualVersion) {
-                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
-            }
-        }
-
-        exec.cancel();
-        poller.cancel();
+        infoReq.done();
+        tarballReq.done();
     });
 });
 
-test(`Should use the base version if the latest version is not available`, async () => {
+test(`Should poll for a module and install it with dependencies, then return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
+        const REGISTRY = 'https://registry.npmjs.org';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
             bar: '56.0.3',
@@ -353,228 +287,334 @@ test(`Should use the base version if the latest version is not available`, async
                 latest:  MODULE_VERSION
             },
             'versions': {
-                [MODULE_VERSION]: {
+                [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
-                }
-            }
-        };
-
-        const exec = mockExec();
-
-        const getReq = nock('https://registry.npmjs.org')
-            .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
-
-        const poller = poll({
-            name:    MODULE_NAME,
-            onError: reject
-        });
-
-        getReq.done();
-
-        const next = await exec.next();
-        checkNpmOptions(next.cmd);
-
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-        }
-
-        await next.res(JSON.stringify({}));
-
-        const { version } = await poller.get();
-
-        if (version !== MODULE_VERSION) {
-            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
-        }
-
-        exec.cancel();
-        poller.cancel();
-    });
-});
-
-test(`Should install both release and latest versions if they are different`, async () => {
-    await wrapPromise(async (reject) => {
-
-        const MODULE_NAME = 'grabthar-test-module';
-        const RELEASE_VERSION = '1.2.563';
-        const LATEST_VERSION = '1.0.4';
-
-        const MODULE_DEPENDENCIES = {
-            foo: '1.2.3',
-            bar: '56.0.3',
-            baz: '6.12.99'
-        };
-
-
-        const info = {
-            'name':      MODULE_NAME,
-            'dist-tags': {
-                'latest':  LATEST_VERSION,
-                'release': RELEASE_VERSION
-            },
-            'versions': {
-                [ LATEST_VERSION ]: {
-                    'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
                 },
-                [ RELEASE_VERSION ]: {
+                [ MODULE_PREVIOUS_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
                 }
             }
         };
 
-        const exec = mockExec();
-
-        const getReq = nock('https://registry.npmjs.org')
+        const infoReq = nock(REGISTRY)
             .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
+            .reply(200, info)
+            .persist();
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+        const dependencyNocks = [];
+
+        for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
+            const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
+            
+            const dependencyInfoReq = nock(REGISTRY)
+                .get(`/${ dependencyName }`)
+                .reply(200, {
+                    'name':      dependencyName,
+                    'dist-tags': {
+                        latest:  dependencyVersion
+                    },
+                    'versions': {
+                        [ dependencyVersion.toString() ]: {
+                            'dependencies': {},
+                            'dist':         {
+                                'tarball': `${ REGISTRY }/${ tarballUri }`
+                            }
+                        }
+                    }
+                })
+                .persist();
+
+            const dependencyTarballReq = nock(REGISTRY)
+                .get(`/${ tarballUri }`)
+                .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+            dependencyNocks.push(dependencyInfoReq);
+            dependencyNocks.push(dependencyTarballReq);
+        }
 
         const poller = poll({
-            tags:    [ 'latest', 'release' ],
-            name:    MODULE_NAME,
-            onError: reject
+            name:         MODULE_NAME,
+            onError:      reject,
+            logger,
+            dependencies: true
         });
 
-        getReq.done();
+        const result = await poller.get();
+        await poller.cancel();
 
-        let releaseVersionInstalled = false;
-        let latestVersionInstalled = false;
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        for (let i = 0; i < 2; i += 1) {
-            const next = await exec.next();
-            checkNpmOptions(next.cmd);
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
 
-            if (next.cmd.args[1] !== 'install') {
-                throw new Error(`Expected 'npm install ${ MODULE_NAME }' to be run, got '${ next.cmd.args.join(' ') }'`);
-            }
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
 
-            await next.res(JSON.stringify({}));
-            
-            if (next.cmd.args[2] === `${ MODULE_NAME }@${ RELEASE_VERSION }`) {
-                releaseVersionInstalled = true;
-
-                const { version: releaseVersion } = await poller.get('release');
-
-                if (releaseVersion !== RELEASE_VERSION) {
-                    throw new Error(`Expected npm install version '${ RELEASE_VERSION }' to match moduleVersion '${ releaseVersion }'`);
-                }
-
-
-            } else if (next.cmd.args[2] === `${ MODULE_NAME }@${ LATEST_VERSION }`) {
-                latestVersionInstalled = true;
-
-                const { version: latestVersion } = await poller.get('latest');
-
-                if (latestVersion !== LATEST_VERSION) {
-                    throw new Error(`Expected npm install version '${ LATEST_VERSION }' to match moduleVersion '${ latestVersion }'`);
-                }
-                
-            } else {
-                throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ RELEASE_VERSION }' or 'npm install ${ MODULE_NAME }@${ LATEST_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
-            }
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
+            expect(await exists(dependency.path)).toBeTruthy();
+            expect(await exists(join(dependency.path, 'package.json'))).toBeTruthy();
         }
 
-        if (!releaseVersionInstalled) {
-            throw new Error(`Expected release version to be installed`);
-        }
+        infoReq.done();
+        tarballReq.done();
 
-        if (!latestVersionInstalled) {
-            throw new Error(`Expected latest version to be installed`);
+        for (const dependencyNock of dependencyNocks) {
+            dependencyNock.done();
         }
-        
-        exec.cancel();
-        poller.cancel();
     });
 });
 
-test(`Should poll for a module and install it with custom npm options, and pass those options through to npm`, async () => {
+test(`Should poll for a module and install it with dependencies on a custom registry, then return the correct latest version`, async () => {
     await wrapPromise(async (reject) => {
 
-        const MODULE_NAME = 'grabthar-test-module';
-        const MODULE_VERSION = '1.3.53';
+        const REGISTRY = 'https://npm.paypal.com';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
             foo: '1.2.3',
             bar: '56.0.3',
             baz: '6.12.99'
         };
 
-        const REGISTRY = 'https://www.paypal.com';
-
         const info = {
             'name':      MODULE_NAME,
             'dist-tags': {
-                latest: MODULE_VERSION
+                latest:  MODULE_VERSION
             },
             'versions': {
-                [MODULE_VERSION]: {
+                [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
-                    'dist':         {}
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
                 }
             }
         };
 
-        const exec = mockExec();
-
-        nock(REGISTRY)
-            .get(`/info`)
-            .reply(200, {});
-
-        const getReq = nock(REGISTRY)
+        const infoReq = nock(REGISTRY)
             .get(`/${ MODULE_NAME }`)
-            .reply(200, info);
+            .reply(200, info)
+            .persist();
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+        const dependencyNocks = [];
+
+        for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
+            const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
+            
+            const dependencyInfoReq = nock(REGISTRY)
+                .get(`/${ dependencyName }`)
+                .reply(200, {
+                    'name':      dependencyName,
+                    'dist-tags': {
+                        latest:  dependencyVersion
+                    },
+                    'versions': {
+                        [ dependencyVersion.toString() ]: {
+                            'dependencies': {},
+                            'dist':         {
+                                'tarball': `${ REGISTRY }/${ tarballUri }`
+                            }
+                        }
+                    }
+                })
+                .persist();
+
+            const dependencyTarballReq = nock(REGISTRY)
+                .get(`/${ tarballUri }`)
+                .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+            dependencyNocks.push(dependencyInfoReq);
+            dependencyNocks.push(dependencyTarballReq);
+        }
 
         const poller = poll({
-            name:       MODULE_NAME,
-            onError:    reject,
-            npmOptions: {
-                registry: REGISTRY
-            }
+            name:         MODULE_NAME,
+            onError:      reject,
+            logger,
+            dependencies: true,
+            registry:     REGISTRY
         });
 
-        getReq.done();
+        const result = await poller.get();
+        await poller.cancel();
 
-        const next = await exec.next();
-        checkNpmOptions(next.cmd, { expectedRegistry: REGISTRY });
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        if (next.cmd.args[1] !== 'install' || next.cmd.args[2] !== `${ MODULE_NAME }@${ MODULE_VERSION }`) {
-            throw new Error(`Expected 'npm install ${ MODULE_NAME }@${ MODULE_VERSION }' to be run, got '${ next.cmd.args.join(' ') }'`);
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
+            expect(await exists(dependency.path)).toBeTruthy();
+            expect(await exists(join(dependency.path, 'package.json'))).toBeTruthy();
         }
 
-        const { prefix } = next.cmd.opts;
+        infoReq.done();
+        tarballReq.done();
 
-        if (!prefix) {
-            throw new Error(`Expected npm install to pass prefix`);
+        for (const dependencyNock of dependencyNocks) {
+            dependencyNock.done();
         }
+    });
+});
 
-        await next.res(JSON.stringify({}));
+test(`Should poll for a module and install it with dependencies on a cdn registry, then return the correct latest version`, async () => {
+    await wrapPromise(async (reject) => {
 
-        const pollerPromise = poller.get();
-        
-        const { version, dependencies } = await pollerPromise;
+        const CDN_PATH = 'foo';
+        const REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
+        const MODULE_DEPENDENCIES = {
+            foo: '1.2.3',
+            bar: '56.0.3',
+            baz: '6.12.99'
+        };
 
-        if (version !== MODULE_VERSION) {
-            throw new Error(`Expected npm install version '${ MODULE_VERSION }' to match moduleVersion '${ version }'`);
-        }
-
-        const expectedDependencyNumber = Object.keys(MODULE_DEPENDENCIES).length;
-        const actualDependencyNumbber = Object.keys(dependencies).length;
-
-        if (expectedDependencyNumber !== actualDependencyNumbber) {
-            throw new Error(`Expected ${ expectedDependencyNumber } dependencies, got ${ actualDependencyNumbber } dependencies`);
-        }
-
-        for (const dependencyName of Object.keys(MODULE_DEPENDENCIES)) {
-            const expectedVersion = MODULE_DEPENDENCIES[dependencyName];
-            const actualVersion = dependencies[dependencyName].version;
-
-            if (expectedVersion !== actualVersion) {
-                throw new Error(`Expected dependency ${ dependencyName } version ${ expectedVersion }, got version ${ actualVersion }`);
+        const info = {
+            'name':      MODULE_NAME,
+            'dist-tags': {
+                latest:  MODULE_VERSION
+            },
+            'versions': {
+                [ MODULE_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                }
             }
+        };
+
+        const infoReq = nock(REGISTRY)
+            .get(`/${ MODULE_NAME }/info.json`)
+            .query(keys => {
+                if (keys['cache-bust']) {
+                    return true;
+                } else {
+                    return false;
+                }
+            })
+            .reply(200, info)
+            .persist();
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+        const dependencyNocks = [];
+
+        for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
+            const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
+            
+            const dependencyInfoReq = nock(REGISTRY)
+                .get(`/${ dependencyName }/info.json`)
+                .query(keys => {
+                    if (keys['cache-bust']) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                })
+                .reply(200, {
+                    'name':      dependencyName,
+                    'dist-tags': {
+                        latest:  dependencyVersion
+                    },
+                    'versions': {
+                        [ dependencyVersion.toString() ]: {
+                            'dependencies': {},
+                            'dist':         {
+                                'tarball': `${ REGISTRY }/${ tarballUri }`
+                            }
+                        }
+                    }
+                })
+                .persist();
+
+            const dependencyTarballReq = nock(REGISTRY)
+                .get(`/${ tarballUri }`)
+                .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+            dependencyNocks.push(dependencyInfoReq);
+            dependencyNocks.push(dependencyTarballReq);
         }
 
-        exec.cancel();
-        poller.cancel();
+        const poller = poll({
+            name:         MODULE_NAME,
+            onError:      reject,
+            logger,
+            dependencies: true,
+            cdnRegistry:  REGISTRY
+        });
+
+        const result = await poller.get();
+        await poller.cancel();
+
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
+
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
+            expect(await exists(dependency.path)).toBeTruthy();
+            expect(await exists(join(dependency.path, 'package.json'))).toBeTruthy();
+        }
+
+        infoReq.done();
+        tarballReq.done();
+
+        for (const dependencyNock of dependencyNocks) {
+            dependencyNock.done();
+        }
     });
 });

@@ -11,9 +11,6 @@ export const PACKAGE = 'package';
 export const PACKAGE_JSON = 'package.json';
 export const LOCK = 'grabthar.lock';
 
-export const NPM = 'npm';
-export const DOTNPM = '.npm';
-
 export const STABILITY = {
     STABLE:   'stable',
     UNSTABLE: 'unstable'

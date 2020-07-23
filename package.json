@@ -28,9 +28,10 @@
   },
   "homepage": "https://github.com/krakenjs/grabthar#readme",
   "devDependencies": {
+    "@jest/globals": "^26.1.0",
     "flow-bin": "^0.112.0",
     "grumbler-scripts": "^3",
-    "jest": "^24",
+    "jest": "^26",
     "nock": "^10.0.6",
     "yargs-parser": "^10.0.0"
   },
@@ -41,8 +42,6 @@
     "fs-extra": "^7.0.1",
     "lru-cache": "^5.1.1",
     "node-fetch": "^2.3.0",
-    "npm": "^6",
-    "npm-run": "^5",
     "rmfr": "^2.0.0",
     "uuid": "^3.2.1"
   }

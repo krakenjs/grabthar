@@ -2,11 +2,9 @@
 
 import { join } from 'path';
 import { homedir, tmpdir } from 'os';
-import { lookup } from 'dns';
 
 import { mkdir, exists, readFile, removeSync, writeFileSync, existsSync } from 'fs-extra';
 import rmfr from 'rmfr';
-import { exec } from 'npm-run';
 
 import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON, LOCK } from './constants';
@@ -122,81 +120,6 @@ export function poll<T : mixed>({ handler, onError, period, multiplier = 2 } : {
 
     return result;
 }
-
-export async function npmRun(command : string, options : Object) : Promise<string> {
-    return await new Promise((resolve, reject) => {
-        const startTime = Date.now();
-
-        exec(command, options, (err, stdout, stderr) => {
-            const elapsedTime = (Date.now() - startTime);
-
-            if (stderr) {
-                return reject(new Error(stderr.toString()));
-            }
-
-            if (err) {
-                if (stdout) {
-                    let json;
-                    try {
-                        json = JSON.parse(stdout);
-                    } catch (err2) {
-                        return reject(err);
-                    }
-                    if (json && json.error) {
-                        const { code, summary, detail } = json.error;
-                        return reject(new Error(`${ code } ${ summary }\n\n${ detail }`));
-                    }
-                    return reject(err);
-                }
-
-                if (err.killed) {
-                    if (options.timeout && (options.timeout < (elapsedTime - options.timeout))) {
-                        return reject(new Error(`Command timed out after ${ options.timeout }ms: ${ command }`));
-                    }
-
-                    return reject(new Error(`Command killed after ${ elapsedTime }ms: ${ command }`));
-                }
-
-                return reject(err);
-            }
-
-            return resolve(stdout.toString());
-        });
-    });
-}
-
-export function stringifyCommandLineOptions(options : { [string] : string | boolean }) : string {
-    const result = [];
-    for (const key of Object.keys(options)) {
-        const value = options[key];
-        const token = `--${ key }`;
-
-        if (typeof value === 'boolean') {
-            if (value === true) {
-                result.push(token);
-            } else if (value === false) {
-                continue;
-            }
-        } else if (typeof value === 'string') {
-            result.push(`${ token }=${ JSON.stringify(value) }`);
-        }
-    }
-    return result.join(' ');
-}
-
-// $FlowFixMe
-export const lookupDNS = async (domain : string) : Promise<string> => {
-    return await new Promise((resolve, reject) => {
-        domain = domain.replace(/^https?:\/\//, '');
-        lookup(domain, (err : ?Error, res : string) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(res);
-            }
-        });
-    });
-};
 
 export function resolveModuleDirectory(name : string, paths? : $ReadOnlyArray<string>) : ?string {
     let dir;

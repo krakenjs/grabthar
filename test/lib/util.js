@@ -18,3 +18,8 @@ export async function wrapPromise<T : mixed>(handler : (reject : (reason : ?mixe
 export async function nextTick() : Promise<void> {
     return await new Promise(resolve => process.nextTick(resolve));
 }
+
+export function entries<T>(obj : { [string] : T }) : $ReadOnlyArray<[ string, T ]> {
+    // $FlowFixMe
+    return Object.entries(obj);
+}

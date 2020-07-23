@@ -10,71 +10,13 @@ import fetch from 'node-fetch';
 import uuid from 'uuid';
 
 import type { CacheType, LoggerType } from './types';
-import { NPM_REGISTRY, NPM_CACHE_DIR, NPM_TIMEOUT, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME } from './config';
-import { NPM, NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { npmRun, sanitizeString,
-    stringifyCommandLineOptions, lookupDNS, cacheReadWrite, clearObject, rmrf, useFileSystemLock, isValidDependencyVersion } from './util';
+import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME } from './config';
+import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
+import { sanitizeString, cacheReadWrite, clearObject, rmrf, useFileSystemLock, isValidDependencyVersion } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
-export type NpmOptionsType = {|
-    prefix? : string,
-    registry? : string,
-    cache? : string,
-    json? : boolean,
-    production? : boolean,
-    silent? : boolean
-|};
-
-const DEFAULT_NPM_OPTIONS : NpmOptionsType = {
-    silent:     true,
-    json:       true,
-    production: true,
-    cache:      NPM_CACHE_DIR,
-    registry:   NPM_REGISTRY
-};
-
-const getDefaultNpmOptions = () : NpmOptionsType => {
-    // $FlowFixMe
-    return {};
-};
-
 const verifyCache : { [string] : Promise<void> } = {};
-
-const verifyRegistry = async (domain : string) : Promise<void> => {
-    verifyCache[domain] = verifyCache[domain] || (async () => {
-        await lookupDNS(domain);
-        const res = await fetch(`${ domain }/info`);
-        delete verifyCache[domain];
-        if (res.status !== 200) {
-            throw new Error(`Got ${ res.status } from ${ domain }/info`);
-        }
-    })();
-
-    await verifyCache[domain];
-};
-
-
-export async function npm(command : string, args : $ReadOnlyArray<string> = [], npmOptions : ?NpmOptionsType = getDefaultNpmOptions(), timeout? : number = NPM_TIMEOUT) : Promise<Object> {
-    npmOptions = { ...DEFAULT_NPM_OPTIONS, ...npmOptions };
-
-    if (!npmOptions.registry) {
-        throw new Error(`Expected npm registry to be passed`);
-    }
-
-    await verifyRegistry(npmOptions.registry);
-
-    const cmdstring = `${ NPM } ${ command } ${ args.join(' ') } ${ stringifyCommandLineOptions(npmOptions) }`;
-
-    const cmdoptions = {
-        timeout,
-        env: process.env
-    };
-    
-    const result = await npmRun(cmdstring, cmdoptions);
-
-    return JSON.parse(result);
-}
 
 export type Package = {|
     'name' : string,
@@ -112,20 +54,20 @@ function extractInfo(moduleInfo : Package) : Package {
 }
 
 type InfoOptions = {|
-    npmOptions : NpmOptionsType | void,
     cache : ?CacheType,
     logger : LoggerType,
+    registry : string,
     cdnRegistry : ?string
 |};
 
-const infoCache : { [string] : Promise<Package> } = {};
+const transientInfoCache : { [string] : Promise<Package> } = {};
+const infoCache : { [string] : Package } = {};
 
 export async function info(moduleName : string, opts : InfoOptions) : Promise<Package> {
-    const { npmOptions = getDefaultNpmOptions(), logger, cache, cdnRegistry } = opts;
-    const memoryCacheKey = JSON.stringify({ moduleName, npmOptions });
-    const { registry = NPM_REGISTRY } = npmOptions;
+    const { logger, cache, registry = NPM_REGISTRY, cdnRegistry } = opts;
+    const memoryCacheKey = JSON.stringify({ moduleName });
 
-    infoCache[memoryCacheKey] = infoCache[memoryCacheKey] || (async () => {
+    transientInfoCache[memoryCacheKey] = transientInfoCache[memoryCacheKey] || (async () => {
         const sanitizedName = sanitizeString(moduleName);
         const sanitizedCDNRegistry = sanitizeString(cdnRegistry || 'npm');
 
@@ -133,7 +75,6 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
         logger.info(`grabthar_npm_info_${ sanitizedName }`, { registry });
 
         const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
-
             let res;
 
             if (cdnRegistry) {
@@ -162,19 +103,27 @@ export async function info(moduleName : string, opts : InfoOptions) : Promise<Pa
     })();
 
     try {
-        return await infoCache[memoryCacheKey];
+        infoCache[memoryCacheKey] = await transientInfoCache[memoryCacheKey];
+        return infoCache[memoryCacheKey];
+    } catch (err) {
+        if (infoCache[memoryCacheKey]) {
+            logger.warn(`grabthar_info_fallback`, { moduleName, err: err.stack || err.toString() });
+            return infoCache[memoryCacheKey];
+        } else {
+            throw err;
+        }
     } finally {
-        delete infoCache[memoryCacheKey];
+        delete transientInfoCache[memoryCacheKey];
     }
 }
 
 type InstallOptions = {|
-    npmOptions : NpmOptionsType,
     logger : LoggerType,
     cache? : ?CacheType,
     dependencies? : boolean,
-    flat? : boolean,
-    cdnRegistry : ?string
+    registry : string,
+    cdnRegistry : ?string,
+    prefix : string
 |};
 
 export const installSingle = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
@@ -183,13 +132,12 @@ export const installSingle = async (moduleName : string, version : string, opts 
         throw new Error(`Invalid version for single install: ${ moduleName }@${ version }`);
     }
 
-    const { npmOptions = getDefaultNpmOptions(), cache, logger, cdnRegistry } = opts;
+    const { cache, logger, registry = NPM_REGISTRY, cdnRegistry, prefix } = opts;
 
-    const moduleInfo = await info(moduleName, { npmOptions, cache, logger, cdnRegistry });
+    const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
 
     const versionInfo = moduleInfo.versions[version];
     const tarball = versionInfo.dist.tarball;
-    const { prefix, registry } = npmOptions;
 
     if (!prefix) {
         throw new Error(`Prefix required for flat install`);
@@ -250,86 +198,32 @@ export const installSingle = async (moduleName : string, version : string, opts 
     }
 };
 
-export const installFlat = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    const { npmOptions, cache, logger, dependencies = true, cdnRegistry } = opts;
-
-    const tasks = [];
-
-    if (dependencies) {
-        const moduleInfo = await info(moduleName, { npmOptions, cache, logger, cdnRegistry });
-        const dependencyVersions = moduleInfo.versions[version].dependencies;
-
-        for (const dependencyName of Object.keys(dependencyVersions)) {
-            const dependencyVersion = dependencyVersions[dependencyName];
-            if (!isValidDependencyVersion(dependencyVersion)) {
-                throw new Error(`Invalid dependency version for flat single install: ${ dependencyName }@${ dependencyVersion }`);
-            }
-        }
-
-        for (const dependencyName of Object.keys(dependencyVersions)) {
-            const dependencyVersion = dependencyVersions[dependencyName];
-            tasks.push(installSingle(dependencyName, dependencyVersion, opts));
-        }
-    }
-
-    tasks.push(installSingle(moduleName, version, opts));
-
-    await Promise.all(tasks);
-};
-
-export const installFull = async (moduleName : string, version : string, { npmOptions = getDefaultNpmOptions(), logger, cdnRegistry } : InstallOptions) : Promise<void> => {
-    const { registry, prefix } = npmOptions;
-
-    if (!prefix) {
-        throw new Error(`Prefix required for flat install`);
-    }
-
-    if (cdnRegistry) {
-        throw new Error(`Can not do full install when using cdnRegistry`);
-    }
-
-    const sanitizedName = sanitizeString(moduleName);
-    logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { version, registry, prefix });
-
-    const nodeModulesDir = join(prefix, NODE_MODULES);
-    const moduleDir = join(nodeModulesDir, moduleName);
-    const modulePackageDir = join(moduleDir, PACKAGE_JSON);
-
-    if (await exists(modulePackageDir)) {
-        return;
-    }
-
-    logger.info(`grabthar_npm_install_${ sanitizedName }`, { version, registry, prefix });
-    await npm('install', [ `${ moduleName }@${ version }` ], npmOptions);
-};
-
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    const { dependencies = true, flat = false, npmOptions, logger, cdnRegistry } = opts;
-    const prefix = npmOptions.prefix;
-
     return await useFileSystemLock(async () => {
-        if (flat) {
-            if (!prefix) {
-                throw new Error(`NPM prefix required for flat install`);
-            }
+        const { cache, logger, dependencies = false, registry = NPM_REGISTRY, cdnRegistry } = opts;
 
-            try {
-                return await installFlat(moduleName, version, opts);
-            } catch (err) {
-                logger.warn('grabthar_install_flat_error_fallback', { err: err.stack || err.toString() });
+        const tasks = [];
 
-                if (dependencies && !cdnRegistry) {
-                    await rmrf(prefix);
-                    return await installFull(moduleName, version, opts);
+        if (dependencies) {
+            const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
+            const dependencyVersions = moduleInfo.versions[version].dependencies;
+
+            for (const dependencyName of Object.keys(dependencyVersions)) {
+                const dependencyVersion = dependencyVersions[dependencyName];
+                if (!isValidDependencyVersion(dependencyVersion)) {
+                    throw new Error(`Invalid dependency version for flat single install: ${ dependencyName }@${ dependencyVersion }`);
                 }
-
-                throw err;
             }
-        } else if (dependencies) {
-            return await installFull(moduleName, version, opts);
-        } else {
-            throw new Error(`Can not install with dependencies=false and flat=false`);
+
+            for (const dependencyName of Object.keys(dependencyVersions)) {
+                const dependencyVersion = dependencyVersions[dependencyName];
+                tasks.push(installSingle(dependencyName, dependencyVersion, opts));
+            }
         }
+
+        tasks.push(installSingle(moduleName, version, opts));
+
+        await Promise.all(tasks);
     });
 };
 
