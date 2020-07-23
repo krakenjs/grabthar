@@ -191,7 +191,7 @@ test(`Should poll for a module on a cdn registry and install it, then return the
     await wrapPromise(async (reject) => {
 
         const CDN_PATH = 'foo';
-        const REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
@@ -209,19 +209,19 @@ test(`Should poll for a module on a cdn registry and install it, then return the
                 [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
                     'dist':         {
-                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                        'tarball': `${ CDN_REGISTRY }/${ TARBALL }`
                     }
                 },
                 [ MODULE_PREVIOUS_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
                     'dist':         {
-                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                        'tarball': `${ CDN_REGISTRY }/${ TARBALL }`
                     }
                 }
             }
         };
 
-        const infoReq = nock(REGISTRY)
+        const infoReq = nock(CDN_REGISTRY)
             .get(`/${ MODULE_NAME }/info.json`)
             .query(keys => {
                 if (keys['cache-bust']) {
@@ -233,14 +233,14 @@ test(`Should poll for a module on a cdn registry and install it, then return the
             .reply(200, info)
             .persist();
 
-        const tarballReq = nock(REGISTRY)
+        const tarballReq = nock(CDN_REGISTRY)
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
         const poller = poll({
             name:         MODULE_NAME,
             onError:      reject,
-            cdnRegistry:  REGISTRY,
+            cdnRegistry:  CDN_REGISTRY,
             logger
         });
 
@@ -496,7 +496,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
     await wrapPromise(async (reject) => {
 
         const CDN_PATH = 'foo';
-        const REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
@@ -514,19 +514,19 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
                 [ MODULE_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
                     'dist':         {
-                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                        'tarball': `${ CDN_REGISTRY }/${ TARBALL }`
                     }
                 },
                 [ MODULE_PREVIOUS_VERSION ]: {
                     'dependencies': MODULE_DEPENDENCIES,
                     'dist':         {
-                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                        'tarball': `${ CDN_REGISTRY }/${ TARBALL }`
                     }
                 }
             }
         };
 
-        const infoReq = nock(REGISTRY)
+        const infoReq = nock(CDN_REGISTRY)
             .get(`/${ MODULE_NAME }/info.json`)
             .query(keys => {
                 if (keys['cache-bust']) {
@@ -538,7 +538,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
             .reply(200, info)
             .persist();
 
-        const tarballReq = nock(REGISTRY)
+        const tarballReq = nock(CDN_REGISTRY)
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
@@ -547,7 +547,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
         for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
             const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
             
-            const dependencyInfoReq = nock(REGISTRY)
+            const dependencyInfoReq = nock(CDN_REGISTRY)
                 .get(`/${ dependencyName }/info.json`)
                 .query(keys => {
                     if (keys['cache-bust']) {
@@ -565,14 +565,14 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
                         [ dependencyVersion.toString() ]: {
                             'dependencies': {},
                             'dist':         {
-                                'tarball': `${ REGISTRY }/${ tarballUri }`
+                                'tarball': `${ CDN_REGISTRY }/${ tarballUri }`
                             }
                         }
                     }
                 })
                 .persist();
 
-            const dependencyTarballReq = nock(REGISTRY)
+            const dependencyTarballReq = nock(CDN_REGISTRY)
                 .get(`/${ tarballUri }`)
                 .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
@@ -585,7 +585,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
             onError:      reject,
             logger,
             dependencies: true,
-            cdnRegistry:  REGISTRY
+            cdnRegistry:  CDN_REGISTRY
         });
 
         const result = await poller.get();
@@ -616,5 +616,240 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
         for (const dependencyNock of dependencyNocks) {
             dependencyNock.done();
         }
+    });
+});
+
+test(`Should poll for a module on a cdn registry and install it, fail and fall back to npm, then return the correct latest version`, async () => {
+    await wrapPromise(async (reject) => {
+
+        const CDN_PATH = 'foo';
+        const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const REGISTRY = 'https://registry.npmjs.org';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
+        const MODULE_DEPENDENCIES = {
+            foo: '1.2.3',
+            bar: '56.0.3',
+            baz: '6.12.99'
+        };
+
+        const info = {
+            'name':        MODULE_NAME,
+            'dist-tags': {
+                latest:  MODULE_VERSION
+            },
+            'versions': {
+                [ MODULE_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                }
+            }
+        };
+
+        const infoReq = nock(CDN_REGISTRY)
+            .get(`/${ MODULE_NAME }/info.json`)
+            .query(keys => {
+                if (keys['cache-bust']) {
+                    return true;
+                } else {
+                    return false;
+                }
+            })
+            .reply(500)
+            .persist();
+
+        const fallbackInfoReq = nock(REGISTRY)
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info)
+            .persist();
+
+        const fallbackTarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+        const poller = poll({
+            name:         MODULE_NAME,
+            onError:      reject,
+            cdnRegistry:  CDN_REGISTRY,
+            logger
+        });
+
+        const result = await poller.get();
+        await poller.cancel();
+
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
+
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
+        }
+
+        infoReq.done();
+        fallbackInfoReq.done();
+        fallbackTarballReq.done();
+    });
+});
+
+test(`Should poll for a module and install it with caching, then return the correct latest version`, async () => {
+    await wrapPromise(async (reject) => {
+
+        const REGISTRY = 'https://registry.npmjs.org';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
+        const MODULE_DEPENDENCIES = {
+            foo: '1.2.3',
+            bar: '56.0.3',
+            baz: '6.12.99'
+        };
+
+        const info = {
+            'name':        MODULE_NAME,
+            'dist-tags': {
+                latest:  MODULE_VERSION
+            },
+            'versions': {
+                [ MODULE_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                }
+            }
+        };
+
+        const infoReq = nock(REGISTRY)
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info);
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+        const store = {};
+        const cache = {
+            get: (key) => {
+                return Promise.resolve(store[key]);
+            },
+            set: (key, value) => {
+                store[key] = value;
+                // $FlowFixMe
+                return Promise.resolve(value);
+            }
+        };
+
+        const poller = poll({
+            name:         MODULE_NAME,
+            onError:      reject,
+            cache,
+            logger
+        });
+
+        const result = await poller.get();
+        await poller.cancel();
+
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(await exists(result.nodeModulesPath)).toBeTruthy();
+
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(await exists(result.modulePath)).toBeTruthy();
+        expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
+
+        expect(result.version).toEqual(MODULE_VERSION);
+        expect(result.previousVersion).toEqual(MODULE_PREVIOUS_VERSION);
+        expect(result.dependencies).toBeTruthy();
+
+        for (const [ depedencyName, dependency ] of entries(result.dependencies)) {
+            expect(dependency).toBeTruthy();
+            expect(dependency.version).toEqual(MODULE_DEPENDENCIES[depedencyName]);
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ depedencyName }`));
+        }
+
+        infoReq.done();
+        tarballReq.done();
+    });
+});
+
+test(`Should poll for a module and install it, then import it`, async () => {
+    await wrapPromise(async (reject) => {
+
+        const REGISTRY = 'https://registry.npmjs.org';
+        const MODULE_PREVIOUS_VERSION = '1.3.52';
+        const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
+        const MODULE_DEPENDENCIES = {
+            foo: '1.2.3',
+            bar: '56.0.3',
+            baz: '6.12.99'
+        };
+
+        const info = {
+            'name':        MODULE_NAME,
+            'dist-tags': {
+                latest:  MODULE_VERSION
+            },
+            'versions': {
+                [ MODULE_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                },
+                [ MODULE_PREVIOUS_VERSION ]: {
+                    'dependencies': MODULE_DEPENDENCIES,
+                    'dist':         {
+                        'tarball': `${ REGISTRY }/${ TARBALL }`
+                    }
+                }
+            }
+        };
+
+        const infoReq = nock(REGISTRY)
+            .get(`/${ MODULE_NAME }`)
+            .reply(200, info)
+            .persist();
+
+        const tarballReq = nock(REGISTRY)
+            .get(`/${ TARBALL }`)
+            .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
+
+        const poller = poll({
+            name:         MODULE_NAME,
+            onError:      reject,
+            logger
+        });
+
+        const { getValue } = await poller.import();
+        expect(await getValue('foo')).toEqual('foo');
+
+        const { getChildValue } = await poller.import('child.js');
+        expect(await getChildValue('bar')).toEqual('bar');
+
+        await poller.cancel();
+
+        infoReq.done();
+        tarballReq.done();
     });
 });
