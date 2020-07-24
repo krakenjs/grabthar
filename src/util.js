@@ -201,13 +201,15 @@ const acquireLock = () => {
     writeFileSync(LOCK_FILE, parseInt(Date.now(), 10).toString());
 };
 
-const releaseLock = () => {
-    locked = false;
-    removeSync(LOCK_FILE);
-};
-
 const isLocked = () => {
     return locked || existsSync(LOCK_FILE);
+};
+
+const releaseLock = () => {
+    if (isLocked) {
+        locked = false;
+        removeSync(LOCK_FILE);
+    }
 };
 
 const getLockTime = async () : Promise<number> => {
