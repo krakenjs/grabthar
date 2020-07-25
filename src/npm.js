@@ -12,7 +12,7 @@ import uuid from 'uuid';
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
 import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise } from './util';
+import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -132,17 +132,12 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     const nodeModulesDir = join(prefix, NODE_MODULES);
     const packageName = `${ PACKAGE }.tar.gz`;
 
-    const tmpDir = join(tmpdir(), uuid.v4().slice(10));
+    const tmpDir = join(tmpdir(), `grabthar-tmp-${ PACKAGE }-${ uuid.v4().slice(0, 8) }`);
     const packageDir = join(tmpDir, PACKAGE);
     const moduleDir = join(nodeModulesDir, moduleInfo.name);
     const modulePackageDir = join(moduleDir, PACKAGE_JSON);
     const moduleLock = join(moduleDir, LOCK);
     const moduleParentDir = join(moduleDir, '..');
-
-    await ensureDir(tmpDir);
-    await ensureDir(prefix);
-    await ensureDir(nodeModulesDir);
-    await ensureDir(moduleParentDir);
 
     if (await exists(modulePackageDir)) {
         return;
@@ -151,6 +146,11 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     if (existsSync(moduleLock)) {
         throw new Error(`${ moduleDir } is locked, can not install ${ moduleName }`);
     }
+
+    await ensureDir(tmpDir);
+    await ensureDir(prefix);
+    await ensureDir(nodeModulesDir);
+    await ensureDir(moduleParentDir);
 
     ensureFileSync(moduleLock);
     const lockTimer = setTimeout(async () => {
@@ -175,6 +175,8 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
         await remove(moduleLock);
         clearTimeout(lockTimer);
     }
+
+    await tryRmrf(tmpDir);
 });
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {

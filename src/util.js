@@ -377,3 +377,11 @@ export function isValidDependencyVersion(version : string) : boolean {
 export function identity<T>(item : T) : T {
     return item;
 }
+
+export async function tryRmrf(dir : string) : Promise<void> {
+    try {
+        await rmrf(dir);
+    } catch (err) {
+        // pass
+    }
+}
