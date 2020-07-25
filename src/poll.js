@@ -196,7 +196,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
 
     return {
         stop:       () => { poller.stop(); },
-        result:     pollInstall,
+        result:     async () => await poller.result(),
         markStable: (version : string) => {
             stability[version] = STABILITY.STABLE;
         },

@@ -193,38 +193,36 @@ export function memoizePromise<T, A : $ReadOnlyArray<*>, F : (...args : A) => Pr
 
         memoizePromiseCache.set(fn, cache);
 
-        if (!cacheResult) {
-            const cacheObj = {};
+        if (cacheResult) {
+            const { resultPromise, expiry } = cacheResult;
 
-            const resultPromise = fn(...args);
-            cacheObj.resultPromise = resultPromise;
-
-            cache[cacheKey] = cacheObj;
-
-            let result;
-            try {
-                result = await resultPromise;
-            } catch (err) {
-                delete cache[cacheKey];
-                throw err;
+            if (!expiry || Date.now() < expiry) {
+                return await resultPromise;
             }
 
-            if (lifetime) {
-                cacheObj.expiry = Date.now() + lifetime;
-            } else {
-                delete cache[cacheKey];
-            }
-
-            return result;
+            delete cache[cacheKey];
         }
 
-        const { resultPromise, expiry } = cacheResult;
+        const resultPromise = fn(...args);
+        const cacheObj = { resultPromise, expiry: 0 };
 
-        if (!expiry || Date.now() < expiry) {
-            return await resultPromise;
+        cache[cacheKey] = cacheObj;
+
+        let result;
+        try {
+            result = await resultPromise;
+        } catch (err) {
+            delete cache[cacheKey];
+            throw err;
         }
 
-        delete cache[cacheKey];
+        if (lifetime) {
+            cacheObj.expiry = Date.now() + lifetime;
+        } else {
+            delete cache[cacheKey];
+        }
+
+        return result;
     };
 
     // $FlowFixMe
