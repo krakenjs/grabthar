@@ -101,7 +101,8 @@ type InstallOptions = {|
     dependencies? : boolean,
     registry : string,
     cdnRegistry : ?string,
-    prefix : string
+    prefix : string,
+    childModules : ?$ReadOnlyArray<string>
 |};
 
 export const installSingle = memoizePromise(async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
@@ -178,7 +179,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
     return await useFileSystemLock(async () => {
-        const { cache, logger, dependencies = false, registry = NPM_REGISTRY, cdnRegistry } = opts;
+        const { cache, logger, dependencies = false, registry = NPM_REGISTRY, cdnRegistry, childModules } = opts;
 
         const tasks = [];
 
@@ -194,6 +195,10 @@ export const install = async (moduleName : string, version : string, opts : Inst
             }
 
             for (const dependencyName of Object.keys(dependencyVersions)) {
+                if (childModules && childModules.indexOf(dependencyName) === -1) {
+                    continue;
+                }
+
                 const dependencyVersion = dependencyVersions[dependencyName];
                 tasks.push(installSingle(dependencyName, dependencyVersion, opts));
             }
