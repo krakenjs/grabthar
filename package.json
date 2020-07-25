@@ -42,6 +42,7 @@
     "fs-extra": "^7.0.1",
     "lru-cache": "^5.1.1",
     "node-fetch": "^2.3.0",
+    "process-exists": "^4.0.0",
     "rmfr": "^2.0.0",
     "uuid": "^3.2.1"
   }

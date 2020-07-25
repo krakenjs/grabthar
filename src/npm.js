@@ -2,17 +2,15 @@
 /* eslint const-immutable/no-mutation: off */
 
 import { join } from 'path';
-import { tmpdir } from 'os';
 
 import { ensureDir, move, existsSync, exists, ensureFileSync } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
-import uuid from 'uuid';
 
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
 import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, tryRemove } from './util';
+import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, tryRemove, getTemporaryDirectory } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -132,7 +130,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     const nodeModulesDir = join(prefix, NODE_MODULES);
     const packageName = `${ PACKAGE }.tar.gz`;
 
-    const tmpDir = join(tmpdir(), `grabthar-tmp-${ PACKAGE }-${ uuid.v4().slice(0, 8) }`);
+    const tmpDir = await getTemporaryDirectory(moduleName);
     const packageDir = join(tmpDir, PACKAGE);
     const moduleDir = join(nodeModulesDir, moduleInfo.name);
     const modulePackageDir = join(moduleDir, PACKAGE_JSON);

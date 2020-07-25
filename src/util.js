@@ -3,8 +3,10 @@
 import { join } from 'path';
 import { homedir, tmpdir } from 'os';
 
-import { exists, readFile, removeSync, writeFileSync, existsSync, ensureDir } from 'fs-extra';
+import { exists, readFile, removeSync, writeFileSync, existsSync, ensureDir, readdir } from 'fs-extra';
 import rmfr from 'rmfr';
+import uuid from 'uuid';
+import processExists from 'process-exists';
 
 import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON, LOCK } from './constants';
@@ -377,4 +379,35 @@ export async function tryRmrf(dir : string) : Promise<void> {
         // eslint-disable-next-line no-console
         console.error(err);
     }
+}
+
+export async function getTemporaryDirectory(name : string) : Promise<string> {
+    const tmpDir = tmpdir();
+
+    try {
+        for (const folder of await readdir(tmpDir)) {
+            const match = folder.match(/^grabthar-tmp-[\w-]+-(\d+)$/);
+
+            if (!match) {
+                if (folder.match(/^grabthar-tmp-package-/)) {
+                    tryRmrf(join(tmpDir, folder));
+                }
+
+                continue;
+            }
+
+            const pid = parseInt(match[1], 10);
+            if (pid === process.pid || await processExists(pid)) {
+                continue;
+            }
+
+            tryRmrf(join(tmpDir, folder));
+        }
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+    }
+
+
+    return join(tmpDir, `grabthar-tmp-${ name.replace(/[^a-zA-Z0-9_-]/g, '') }-${ uuid.v4().slice(0, 8) }-${ process.pid }`);
 }
