@@ -10,13 +10,11 @@ import fetch from 'node-fetch';
 import uuid from 'uuid';
 
 import type { CacheType, LoggerType } from './types';
-import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME } from './config';
+import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
 import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, clearObject, rmrf, useFileSystemLock, isValidDependencyVersion } from './util';
+import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
-
-const verifyCache : { [string] : Promise<void> } = {};
 
 export type Package = {|
     'name' : string,
@@ -60,62 +58,42 @@ type InfoOptions = {|
     cdnRegistry : ?string
 |};
 
-const transientInfoCache : { [string] : Promise<Package> } = {};
-const infoCache : { [string] : Package } = {};
-
-export async function info(moduleName : string, opts : InfoOptions) : Promise<Package> {
+export const info = memoizePromise(async (moduleName : string, opts : InfoOptions) : Promise<Package> => {
     const { logger, cache, registry = NPM_REGISTRY, cdnRegistry } = opts;
-    const memoryCacheKey = JSON.stringify({ moduleName });
 
-    transientInfoCache[memoryCacheKey] = transientInfoCache[memoryCacheKey] || (async () => {
-        const sanitizedName = sanitizeString(moduleName);
-        const sanitizedCDNRegistry = sanitizeString(cdnRegistry || 'npm');
+    const sanitizedName = sanitizeString(moduleName);
+    const sanitizedCDNRegistry = sanitizeString(cdnRegistry || 'npm');
 
-        const cacheKey = `grabthar_npm_info_${ sanitizedName }_${ sanitizedCDNRegistry }`;
-        logger.info(`grabthar_npm_info_${ sanitizedName }`, { registry });
+    const cacheKey = `grabthar_npm_info_${ sanitizedName }_${ sanitizedCDNRegistry }`;
+    logger.info(`grabthar_npm_info_${ sanitizedName }`, { registry });
 
-        const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
-            let res;
+    const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
+        let res;
 
-            if (cdnRegistry) {
-                res = await fetch(`${ cdnRegistry }/${ moduleName.replace('@', '') }/${ CDN_REGISTRY_INFO_FILENAME }?cache-bust=${ Math.floor(Date.now() / CDN_REGISTRY_INFO_CACHEBUST_URL_TIME) }`);
-                if (!res.ok) {
-                    logger.info(`grabthar_cdn_registry_failure`, {
-                        cdnRegistry, moduleName, status: res.status
-                    });
-                    res = null;
-                }
-            }
-
-            if (!res) {
-                res = await fetch(`${ registry }/${ moduleName }`);
-            }
-
+        if (cdnRegistry) {
+            res = await fetch(`${ cdnRegistry }/${ moduleName.replace('@', '') }/${ CDN_REGISTRY_INFO_FILENAME }?cache-bust=${ Math.floor(Date.now() / CDN_REGISTRY_INFO_CACHEBUST_URL_TIME) }`);
             if (!res.ok) {
-                throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
+                logger.warn(`grabthar_cdn_registry_failure`, {
+                    cdnRegistry, moduleName, status: res.status
+                });
+                res = null;
             }
-
-            return extractInfo(await res.json());
-
-        }, { logger, cache });
-
-        return { name, versions, 'dist-tags': distTags };
-    })();
-
-    try {
-        infoCache[memoryCacheKey] = await transientInfoCache[memoryCacheKey];
-        return infoCache[memoryCacheKey];
-    } catch (err) {
-        if (infoCache[memoryCacheKey]) {
-            logger.warn(`grabthar_info_fallback`, { moduleName, err: err.stack || err.toString() });
-            return infoCache[memoryCacheKey];
-        } else {
-            throw err;
         }
-    } finally {
-        delete transientInfoCache[memoryCacheKey];
-    }
-}
+
+        if (!res) {
+            res = await fetch(`${ registry }/${ moduleName }`);
+        }
+
+        if (!res.ok) {
+            throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
+        }
+
+        return extractInfo(await res.json());
+
+    }, { logger, cache });
+
+    return { name, versions, 'dist-tags': distTags };
+}, { lifetime: INFO_MEMORY_CACHE_LIFETIME });
 
 type InstallOptions = {|
     logger : LoggerType,
@@ -126,7 +104,7 @@ type InstallOptions = {|
     prefix : string
 |};
 
-export const installSingle = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
+export const installSingle = memoizePromise(async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
 
     if (!isValidDependencyVersion(version)) {
         throw new Error(`Invalid version for single install: ${ moduleName }@${ version }`);
@@ -196,7 +174,7 @@ export const installSingle = async (moduleName : string, version : string, opts 
         await remove(moduleLock);
         clearTimeout(lockTimer);
     }
-};
+});
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
     return await useFileSystemLock(async () => {
@@ -228,6 +206,5 @@ export const install = async (moduleName : string, version : string, opts : Inst
 };
 
 export function clearCache() {
-    clearObject(verifyCache);
-    clearObject(infoCache);
+    cacheReadWrite.clear();
 }

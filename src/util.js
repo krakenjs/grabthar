@@ -9,6 +9,12 @@ import rmfr from 'rmfr';
 import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON, LOCK } from './constants';
 
+export function clearObject<T>(obj : { [string] : T }) : void {
+    for (const key of Object.keys(obj)) {
+        delete obj[key];
+    }
+}
+
 export async function makedir(dir : string) : Promise<void> {
     try {
         if (!await exists(dir)) {
@@ -48,6 +54,20 @@ export async function createHomeDirectory(...names : $ReadOnlyArray<string>) : P
 
 export async function sleep(period : number) : Promise<void> {
     return await new Promise(resolve => setTimeout(resolve, period));
+}
+
+export function getPromise<T>() : {| promise : Promise<T>, resolve : (T) => void, reject : (mixed) => void |} {
+    let resolve;
+    let reject;
+    // eslint-disable-next-line promise/param-names
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+    if (!resolve || !reject) {
+        throw new Error(`Could not instantiate promise`);
+    }
+    return { promise, resolve, reject };
 }
 
 export async function sleepWhile(condition : () => mixed, period : number, interval : number = 500) : Promise<void> {
@@ -155,42 +175,134 @@ export async function resolveNodeModulesDirectory(name : string, paths? : $ReadO
     }
 }
 
-export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promise<T>, { cache, logger } : {| cache : ?CacheType, logger : LoggerType |}) : Promise<T> {
-    if (cache) {
-        let cacheResult;
+const memoizePromiseCache = new Map();
 
-        try {
-            const cachePromise = cache.get(cacheKey);
-            cacheResult = await cachePromise;
-            if (cacheResult) {
-                cacheResult = JSON.parse(cacheResult);
+type MemoizePromiseOpts = {|
+    lifetime? : number
+|};
+
+export function memoizePromise<T, A : $ReadOnlyArray<*>, F : (...args : A) => Promise<T>>(fn : F, opts? : MemoizePromiseOpts) : F {
+    const {
+        lifetime = 0
+    } = opts || {};
+
+    const memoizedFunction = async (...args) => {
+        const cacheKey = JSON.stringify(args);
+        const cache = memoizePromiseCache.get(fn) || {};
+        const cacheResult = cache[cacheKey];
+
+        memoizePromiseCache.set(fn, cache);
+
+        if (!cacheResult) {
+            const cacheObj = {};
+
+            const resultPromise = fn(...args);
+            cacheObj.resultPromise = resultPromise;
+
+            cache[cacheKey] = cacheObj;
+
+            let result;
+            try {
+                result = await resultPromise;
+            } catch (err) {
+                delete cache[cacheKey];
+                throw err;
             }
-        } catch (err) {
-            logger.info(`${ cacheKey }_cache_error`, { err: err.stack || err.toString() });
+
+            if (lifetime) {
+                cacheObj.expiry = Date.now() + lifetime;
+            } else {
+                delete cache[cacheKey];
+            }
+
+            return result;
         }
 
-        if (cacheResult) {
-            logger.info(`${ cacheKey }_cache_hit`);
-            return cacheResult;
-        } else {
-            logger.info(`${ cacheKey }_cache_miss`);
-        }
-    }
-    
-    const result = await handler();
+        const { resultPromise, expiry } = cacheResult;
 
-    if (cache) {
-        logger.info(`${ cacheKey }_cache_write`);
+        if (!expiry || Date.now() < expiry) {
+            return await resultPromise;
+        }
+
+        delete cache[cacheKey];
+    };
+
+    // $FlowFixMe
+    return memoizedFunction;
+}
+
+memoizePromise.reset = () => {
+    memoizePromiseCache.clear();
+};
+
+const backupMemoryCache = {};
+
+export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promise<T>, { cache, logger } : {| cache : ?CacheType, logger : LoggerType |}) : Promise<T> {
+    const strategies = [
+        async () => {
+            if (cache) {
+                logger.info(`${ cacheKey }_cache_attempt`);
+                const result : ?string = await cache.get(cacheKey);
+                
+                if (result) {
+                    logger.info(`${ cacheKey }_cache_hit`);
+                    return JSON.parse(result);
+                } else {
+                    logger.info(`${ cacheKey }_cache_miss`);
+                }
+            }
+        },
+
+        async () => {
+            const result = await handler();
+            backupMemoryCache[cacheKey] = result;
+
+            if (result && cache) {
+                try {
+                    await cache.set(cacheKey, JSON.stringify(result));
+                } catch (err) {
+                    logger.info(`${ cacheKey }_cache_write_error`, { err: err.stack || err.toString() });
+                }
+            }
+
+            return result;
+        },
+
+        async () => {
+            if (backupMemoryCache[cacheKey]) {
+                return await backupMemoryCache[cacheKey];
+            }
+        }
+    ];
+
+    let error;
+
+    for (const strategy of strategies) {
+        let result;
 
         try {
-            await cache.set(cacheKey, JSON.stringify(result));
+            result = await strategy();
         } catch (err) {
-            logger.info(`${ cacheKey }_cache_write_error`, { err: err.stack || err.toString() });
+            error = err || error;
+            logger.warn(`grabthar_cache_strategy_error`, { err: err.stack || err.toString() });
+        }
+
+        if (result) {
+            return result;
         }
     }
 
-    return result;
+    if (error) {
+        throw error;
+    } else {
+        throw new Error(`No strategy succeeded for ${ cacheKey }`);
+    }
 }
+
+cacheReadWrite.clear = () => {
+    memoizePromise.reset();
+    clearObject(backupMemoryCache);
+};
 
 let locked = false;
 const MAX_LOCK_TIME = 2 * 60 * 1000;
@@ -250,12 +362,6 @@ export async function useFileSystemLock<T>(task : () => Promise<T>) : Promise<T>
 
 export function sanitizeString(str : string) : string {
     return str.replace(/[^a-zA-Z0-9]+/g, '_');
-}
-
-export function clearObject<T>(obj : { [string] : T }) : void {
-    for (const key of Object.keys(obj)) {
-        delete obj[key];
-    }
 }
 
 export async function rmrf(dir : string) : Promise<void> {

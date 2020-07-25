@@ -23,8 +23,9 @@ const logger = {
     warn:  () => {
         // pass
     },
-    error: () => {
-        // pass
+    error: (...args) => {
+        // eslint-disable-next-line no-console
+        console.error(...args);
     }
 };
 

@@ -12,3 +12,5 @@ export const MODULE_ROOT_NAME = '__live_modules__';
 
 export const CDN_REGISTRY_INFO_FILENAME = 'info.json';
 export const CDN_REGISTRY_INFO_CACHEBUST_URL_TIME = 60 * 1000;
+
+export const INFO_MEMORY_CACHE_LIFETIME = 30 * 1000;
