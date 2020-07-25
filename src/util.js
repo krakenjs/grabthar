@@ -3,7 +3,7 @@
 import { join } from 'path';
 import { homedir, tmpdir } from 'os';
 
-import { mkdir, exists, readFile, removeSync, writeFileSync, existsSync } from 'fs-extra';
+import { exists, readFile, removeSync, writeFileSync, existsSync, ensureDir } from 'fs-extra';
 import rmfr from 'rmfr';
 
 import type { CacheType, LoggerType } from './types';
@@ -15,37 +15,18 @@ export function clearObject<T>(obj : { [string] : T }) : void {
     }
 }
 
-export async function makedir(dir : string) : Promise<void> {
-    try {
-        if (!await exists(dir)) {
-            await mkdir(dir);
-        }
-    } catch (err) {
-        if (err.code === 'EEXIST') {
-            return;
-        }
-        throw err;
-    }
-}
-
-export async function createDirectory(dir : string, ...names : $ReadOnlyArray<string>) : Promise<string> {
-    let path = dir;
-    for (const name of names) {
-        path = join(path, name);
-        await makedir(path);
-    }
-    return path;
-}
-
 export async function createHomeDirectory(...names : $ReadOnlyArray<string>) : Promise<string> {
     try {
-        return await createDirectory(homedir(), ...names);
+        const dir = join(homedir(), ...names);
+        await ensureDir(dir);
+        return dir;
     } catch (err) {
-
         const user = process.env.USER;
 
         if (user) {
-            return await createDirectory(join('/home', user), ...names);
+            const dir = join('/home', user, ...names);
+            await ensureDir(dir);
+            return dir;
         }
 
         throw err;

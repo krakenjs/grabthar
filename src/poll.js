@@ -9,8 +9,9 @@ import { readFile } from 'fs-extra';
 import type { LoggerType, CacheType } from './types';
 import { install, info, type Package, clearCache } from './npm';
 import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity } from './util';
-import { MODULE_ROOT_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY } from './config';
+import { LIVE_MODULES_DIR_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY, CLEAN_INTERVAL, CLEAN_THRESHOLD } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
+import { cleanDirectoryTask } from './cleanup';
 
 type InstallResult = {|
     nodeModulesPath : string,
@@ -35,15 +36,14 @@ type InstallVersionOptions = {|
     cache : ?CacheType,
     registry : string,
     cdnRegistry : ?string,
-    childModules : ?$ReadOnlyArray<string>
+    childModules : ?$ReadOnlyArray<string>,
+    prefix : string
 |};
 
-async function installVersion({ moduleInfo, version, dependencies = false, registry = NPM_REGISTRY, logger, cache, cdnRegistry, childModules } : InstallVersionOptions) : Promise<InstallResult> {
-    const newRoot = await createHomeDirectory(MODULE_ROOT_NAME, `${ cleanName(moduleInfo.name) }_${ version }`);
-
-    await install(moduleInfo.name, version, { logger, cache, dependencies, registry, cdnRegistry, prefix: newRoot, childModules });
+async function installVersion({ moduleInfo, version, dependencies = false, registry = NPM_REGISTRY, logger, cache, prefix, cdnRegistry, childModules } : InstallVersionOptions) : Promise<InstallResult> {
+    await install(moduleInfo.name, version, { logger, cache, dependencies, registry, cdnRegistry, prefix, childModules });
     
-    const nodeModulesPath = join(newRoot, NODE_MODULES);
+    const nodeModulesPath = join(prefix, NODE_MODULES);
     const modulePath = join(nodeModulesPath, moduleInfo.name);
     const moduleDependencies = {};
 
@@ -90,7 +90,7 @@ function getMajorVersion(version : string) : string {
 type PollInstallDistTagOptions = {|
     name : string,
     tag : string,
-    onError : ?(Error) => void,
+    onError : ?(mixed) => void,
     period? : number,
     dependencies? : boolean,
     logger : LoggerType,
@@ -99,6 +99,8 @@ type PollInstallDistTagOptions = {|
     cdnRegistry : ?string,
     childModules : ?$ReadOnlyArray<string>
 |};
+
+let cleanTask;
 
 function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = false, logger, cache, registry = NPM_REGISTRY, cdnRegistry, childModules } : PollInstallDistTagOptions) : DistPoller {
     
@@ -177,8 +179,20 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
         }
 
         const version = distTagVersion;
+        const liveModulesDir = await createHomeDirectory(LIVE_MODULES_DIR_NAME);
+        const prefix = join(liveModulesDir, `${ cleanName(moduleInfo.name) }_${ version }`);
+
+        cleanTask = cleanTask || cleanDirectoryTask({
+            dir:       liveModulesDir,
+            interval:  CLEAN_INTERVAL,
+            threshold: CLEAN_THRESHOLD,
+            onError
+        });
+
+        cleanTask.save(prefix);
+
         const { nodeModulesPath, modulePath, dependencies: moduleDependencies } = await installVersion({
-            moduleInfo, version, dependencies, registry, logger, cache, cdnRegistry, childModules
+            moduleInfo, version, dependencies, registry, logger, cache, cdnRegistry, childModules, prefix
         });
 
         return {
@@ -197,7 +211,10 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
     }).start();
 
     return {
-        stop:       () => { poller.stop(); },
+        stop:       () => {
+            poller.stop();
+            cleanTask.cancel();
+        },
         result:     async () => await poller.result(),
         markStable: (version : string) => {
             stability[version] = STABILITY.STABLE;
@@ -221,7 +238,7 @@ type NpmWatcher<T : Object> = {|
 type NPMPollOptions = {|
     name : string,
     tags? : $ReadOnlyArray<string>,
-    onError? : (Error) => void,
+    onError? : (mixed) => void,
     period? : number,
     fallback? : boolean,
     logger? : LoggerType,
