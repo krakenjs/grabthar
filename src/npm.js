@@ -4,7 +4,7 @@
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-import { ensureDir, move, existsSync, exists, remove, ensureFileSync } from 'fs-extra';
+import { ensureDir, move, existsSync, exists, ensureFileSync } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
 import uuid from 'uuid';
@@ -12,7 +12,7 @@ import uuid from 'uuid';
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
 import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf } from './util';
+import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, tryRemove } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -153,8 +153,8 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     await ensureDir(moduleParentDir);
 
     ensureFileSync(moduleLock);
-    const lockTimer = setTimeout(async () => {
-        await remove(moduleLock);
+    const lockTimer = setTimeout(() => {
+        tryRemove(moduleLock);
     }, 60 * 1000);
 
     if (await exists(moduleDir)) {
@@ -163,8 +163,11 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
 
     try {
         await ensureDir(moduleDir);
+        ensureFileSync(moduleLock);
+
         await download(tarball, tmpDir, { extract: true, filename: packageName });
         await move(packageDir, moduleDir, { overwrite: true });
+
         if (!await exists(modulePackageDir)) {
             throw new Error(`Package not found at ${ modulePackageDir }`);
         }
@@ -172,7 +175,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
         await rmrf(moduleDir);
         throw err;
     } finally {
-        await remove(moduleLock);
+        tryRemove(moduleLock);
         clearTimeout(lockTimer);
     }
 

@@ -378,10 +378,22 @@ export function identity<T>(item : T) : T {
     return item;
 }
 
+export function tryRemove(path : string) {
+    try {
+        if (existsSync(path)) {
+            removeSync(path);
+        }
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+    }
+}
+
 export async function tryRmrf(dir : string) : Promise<void> {
     try {
         await rmrf(dir);
     } catch (err) {
-        // pass
+        // eslint-disable-next-line no-console
+        console.error(err);
     }
 }
