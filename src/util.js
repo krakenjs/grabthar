@@ -1,6 +1,6 @@
 /* @flow */
 
-import { join } from 'path';
+import { join, basename } from 'path';
 import { homedir, tmpdir } from 'os';
 
 import { exists, readFile, removeSync, writeFileSync, existsSync, ensureDir, readdir } from 'fs-extra';
@@ -410,4 +410,39 @@ export async function getTemporaryDirectory(name : string) : Promise<string> {
 
 
     return join(tmpDir, `grabthar-tmp-${ name.replace(/[^a-zA-Z0-9_-]/g, '') }-${ uuid.v4().slice(0, 8) }-${ process.pid }`);
+}
+
+export function jumpUpDir(path : string, target : string) : ?string {
+    while (path && path !== '/') {
+        path = join(path, '..');
+
+        if (basename(path) === target) {
+            return path;
+        }
+    }
+}
+
+export function dynamicRequire<T>(path : string) : T {
+    // $FlowFixMe
+    return require(path); // eslint-disable-line security/detect-non-literal-require
+}
+
+export function dynamicRequireRelative<T>(name : string, nodeModulesPath : ?string) : T {
+    if (!nodeModulesPath) {
+        return dynamicRequire(name);
+    }
+
+    while (nodeModulesPath) {
+        try {
+            return dynamicRequire(join(nodeModulesPath, name));
+        } catch (err) {
+            nodeModulesPath = jumpUpDir(nodeModulesPath, NODE_MODULES);
+            
+            if (!nodeModulesPath) {
+                throw err;
+            }
+        }
+    }
+
+    throw new Error(`Can not import ${ name }`);
 }

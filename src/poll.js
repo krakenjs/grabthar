@@ -8,7 +8,7 @@ import { readFile } from 'fs-extra';
 
 import type { LoggerType, CacheType } from './types';
 import { install, info, type Package, clearCache } from './npm';
-import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity } from './util';
+import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity, dynamicRequire, dynamicRequireRelative } from './util';
 import { LIVE_MODULES_DIR_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY, CLEAN_INTERVAL, CLEAN_THRESHOLD } from './config';
 import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
 import { cleanDirectoryTask } from './cleanup';
@@ -301,7 +301,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         pollers[tag] = pollInstallDistTag({ name, tag, onError, period, dependencies, registry, logger, cache, cdnRegistry, childModules });
     }
 
-    async function withPoller<T>(handler : <T>(ModuleDetails) => Promise<T> | T, tag? : ?string) : Promise<T> {
+    async function withPoller<T>(handler : <T>(ModuleDetails) => Promise<T> | T, tag : ?string) : Promise<T> {
         if (tag && !pollers[tag]) {
             throw new Error(`Invalid tag: ${ tag }`);
         }
@@ -339,18 +339,25 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         return await withPoller(identity, tag);
     }
 
-    async function pollerImport <T : Object>(path = '') : Promise<T> {
+    async function pollerImport <T : Object>(path, tag? : ?string) : Promise<T> {
         return await withPoller(({ modulePath }) => {
-            // $FlowFixMe
-            return require(join(modulePath, path)); // eslint-disable-line security/detect-non-literal-require
-        });
+            const fullPath = path ? join(modulePath, path) : modulePath;
+
+            return dynamicRequire(fullPath);
+        }, tag);
     }
 
-    async function pollerImportDependency <T : Object>(dependencyName, path = '') : Promise<T> {
+    async function pollerImportDependency <T : Object>(dependencyName, path, tag? : ?string) : Promise<T> {
         return await withPoller(async ({ modulePath }) => {
-            // $FlowFixMe
-            return require(join(await resolveNodeModulesDirectory(modulePath), dependencyName, path)); // eslint-disable-line security/detect-non-literal-require
-        });
+            const nodeModulesDir = await resolveNodeModulesDirectory(modulePath);
+
+            if (!nodeModulesDir) {
+                throw new Error(`Can not find node modules for ${ modulePath }`);
+            }
+
+            const relativePath = path ? join(dependencyName, path) : dependencyName;
+            return dynamicRequireRelative(relativePath, nodeModulesDir);
+        }, tag);
     }
 
     const readCache = new LRU(20);
