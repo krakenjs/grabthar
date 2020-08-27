@@ -10,7 +10,7 @@ import fetch from 'node-fetch';
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
 import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, rmrf, useFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, tryRemove, getTemporaryDirectory } from './util';
+import { sanitizeString, cacheReadWrite, rmrf, withFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, tryRemove, getTemporaryDirectory } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -181,7 +181,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
 });
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    return await useFileSystemLock(async () => {
+    return await withFileSystemLock(async () => {
         const { cache, logger, dependencies = false, registry = NPM_REGISTRY, cdnRegistry, childModules } = opts;
 
         const tasks = [];

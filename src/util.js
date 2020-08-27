@@ -3,7 +3,7 @@
 import { join, basename } from 'path';
 import { homedir, tmpdir } from 'os';
 
-import { exists, readFile, removeSync, writeFileSync, existsSync, ensureDir, readdir } from 'fs-extra';
+import { exists, removeSync, writeFileSync, existsSync, readFileSync, ensureDir, readdir } from 'fs-extra';
 import rmfr from 'rmfr';
 import uuid from 'uuid';
 import processExists from 'process-exists';
@@ -299,25 +299,31 @@ const isLocked = () => {
 };
 
 const releaseLock = () => {
-    if (isLocked) {
+    if (isLocked()) {
         locked = false;
-        removeSync(LOCK_FILE);
+        if (existsSync(LOCK_FILE)) {
+            removeSync(LOCK_FILE);
+        }
     }
 };
 
-const getLockTime = async () : Promise<number> => {
-    const lock = await readFile(LOCK_FILE);
+const getLockTime = () : ?number => {
+    if (!existsSync(LOCK_FILE)) {
+        return;
+    }
+
+    const lock = readFileSync(LOCK_FILE);
     const time = parseInt(lock.toString(), 10);
     return time;
 };
 
-export async function useFileSystemLock<T>(task : () => Promise<T>) : Promise<T> {
+export async function withFileSystemLock<T>(task : () => Promise<T>) : Promise<T> {
     const startTime = parseInt(Date.now(), 10);
     
     while (isLocked()) {
-        const time = await getLockTime();
+        const time = getLockTime();
         
-        if ((startTime - time) > MAX_LOCK_TIME) {
+        if (!time || (startTime - time) > MAX_LOCK_TIME) {
             releaseLock();
         } else {
             await sleep(500);
