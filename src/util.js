@@ -222,14 +222,10 @@ export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promi
     const strategies = [
         async () => {
             if (cache) {
-                logger.info(`${ cacheKey }_cache_attempt`);
                 const result : ?string = await cache.get(cacheKey);
                 
                 if (result) {
-                    logger.info(`${ cacheKey }_cache_hit`);
                     return JSON.parse(result);
-                } else {
-                    logger.info(`${ cacheKey }_cache_miss`);
                 }
             }
         },
@@ -242,7 +238,7 @@ export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promi
                 try {
                     await cache.set(cacheKey, JSON.stringify(result));
                 } catch (err) {
-                    logger.info(`${ cacheKey }_cache_write_error`, { err: err.stack || err.toString() });
+                    logger.warn(`${ cacheKey }_cache_write_error`, { err: err.stack || err.toString() });
                 }
             }
 

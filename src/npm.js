@@ -63,7 +63,6 @@ export const info = memoizePromise(async (moduleName : string, opts : InfoOption
     const sanitizedCDNRegistry = sanitizeString(cdnRegistry || 'npm');
 
     const cacheKey = `grabthar_npm_info_${ sanitizedName }_${ sanitizedCDNRegistry }`;
-    logger.info(`grabthar_npm_info_${ sanitizedName }`, { registry });
 
     const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
         let res;
@@ -124,9 +123,6 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
         throw new Error(`Can not find tarball for ${ moduleInfo.name }`);
     }
 
-    const sanitizedName = sanitizeString(moduleName);
-    logger.info(`grabthar_npm_install_flat_${ sanitizedName }`, { version, registry, prefix });
-
     const nodeModulesDir = join(prefix, NODE_MODULES);
     const packageName = `${ PACKAGE }.tar.gz`;
 
@@ -183,12 +179,16 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
     return await withFileSystemLock(async () => {
         const { cache, logger, dependencies = false, registry = NPM_REGISTRY, cdnRegistry, childModules } = opts;
+        const sanitizedName = sanitizeString(moduleName);
 
         const tasks = [];
 
         if (dependencies) {
             const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
             const dependencyVersions = moduleInfo.versions[version].dependencies;
+
+            
+            logger.info(`grabthar_npm_install_dependencies_${ sanitizedName }`, { version, registry, dependencies: Object.keys(dependencyVersions).join(',') });
 
             for (const dependencyName of Object.keys(dependencyVersions)) {
                 const dependencyVersion = dependencyVersions[dependencyName];
@@ -207,9 +207,15 @@ export const install = async (moduleName : string, version : string, opts : Inst
             }
         }
 
+        logger.info(`grabthar_npm_install_${ sanitizedName }`, { version, registry });
         tasks.push(installSingle(moduleName, version, opts));
 
-        await Promise.all(tasks);
+        try {
+            await Promise.all(tasks);
+        } catch (err) {
+            logger.error(`grabthar_npm_install_${ sanitizedName }_error`, { err: err.stack || err.toString() });
+            throw err;
+        }
     });
 };
 
