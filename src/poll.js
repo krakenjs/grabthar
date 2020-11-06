@@ -275,6 +275,11 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
 
     for (const dependencyName of Object.keys(pkg.dependencies || {})) {
         const dependencyPath = resolveModuleDirectory(dependencyName, [ modulePath ]); // join(nodeModulesPath, dependencyName);
+
+        if (!dependencyPath) {
+            throw new Error(`Can not resolve dependency for fallback: ${ dependencyName } / ${ modulePath }`);
+        }
+
         // $FlowFixMe
         const dependencyPkg = require(join(dependencyPath, PACKAGE_JSON)); // eslint-disable-line security/detect-non-literal-require
 

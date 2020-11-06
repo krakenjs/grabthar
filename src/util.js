@@ -1,12 +1,13 @@
 /* @flow */
 
-import { join, basename } from 'path';
+import { join, basename, dirname } from 'path';
 import { homedir, tmpdir } from 'os';
 
-import { exists, removeSync, writeFileSync, existsSync, readFileSync, ensureDir, readdir } from 'fs-extra';
+import { exists, removeSync, writeFileSync, existsSync, ensureDirSync, readFileSync, ensureDir, readdir } from 'fs-extra';
 import rmfr from 'rmfr';
 import uuid from 'uuid';
 import processExists from 'process-exists';
+import nodeCleanup from 'node-cleanup';
 
 import type { CacheType, LoggerType } from './types';
 import { NODE_MODULES, PACKAGE_JSON, LOCK } from './constants';
@@ -281,66 +282,108 @@ cacheReadWrite.clear = () => {
     clearObject(backupMemoryCache);
 };
 
-let locked = false;
-const MAX_LOCK_TIME = 2 * 60 * 1000;
-const LOCK_FILE = join(tmpdir(), LOCK);
+const MAX_LOCK_TIME = 60 * 1000;
 
-const acquireLock = () => {
-    locked = true;
-    writeFileSync(LOCK_FILE, parseInt(Date.now(), 10).toString());
+const activeLocks = {};
+
+const acquireLock = (lockFile : string) => {
+    let resolve;
+    let reject;
+    // eslint-disable-next-line promise/param-names
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
+
+    activeLocks[lockFile] = { promise, resolve, reject };
+    ensureDirSync(dirname(lockFile));
+    writeFileSync(lockFile, parseInt(Date.now(), 10).toString());
 };
 
-const isLocked = () => {
-    return locked || existsSync(LOCK_FILE);
+const isLocked = (lockFile : string) => {
+    return activeLocks[lockFile] || existsSync(lockFile);
 };
 
-const releaseLock = () => {
-    if (isLocked()) {
-        locked = false;
-        if (existsSync(LOCK_FILE)) {
-            removeSync(LOCK_FILE);
-        }
+const releaseLock = (lockFile : string) => {
+    if (activeLocks[lockFile]) {
+        activeLocks[lockFile].resolve();
+        delete activeLocks[lockFile];
+    }
+
+    if (existsSync(lockFile)) {
+        removeSync(lockFile);
     }
 };
 
-const getLockTime = () : ?number => {
-    if (!existsSync(LOCK_FILE)) {
+const getLockTime = (lockFile : string) : ?number => {
+    if (!existsSync(lockFile)) {
         return;
     }
 
-    const lock = readFileSync(LOCK_FILE);
+    const lock = readFileSync(lockFile);
     const time = parseInt(lock.toString(), 10);
     return time;
 };
 
-export async function withFileSystemLock<T>(task : () => Promise<T>) : Promise<T> {
-    const startTime = parseInt(Date.now(), 10);
-    
-    while (isLocked()) {
-        const time = getLockTime();
-        
-        if (!time || (startTime - time) > MAX_LOCK_TIME) {
-            releaseLock();
-        } else {
-            await sleep(500);
-            continue;
-        }
+const awaitLock = async (lockFile : string) => {
+    if (!isLocked(lockFile)) {
+        return;
     }
 
-    let result;
+    if (activeLocks[lockFile]) {
+        await activeLocks[lockFile].promise;
+        await sleep(10);
+    }
 
-    acquireLock();
+    if (!isLocked(lockFile)) {
+        return;
+    }
+
+    await new Promise(resolve => {
+        const check = () => {
+            if (!isLocked(lockFile)) {
+                resolve();
+                return;
+            }
+
+            const startTime = parseInt(Date.now(), 10);
+            const time = getLockTime(lockFile);
+            
+            if (!time || (startTime - time) > MAX_LOCK_TIME) {
+                releaseLock(lockFile);
+                resolve();
+                return;
+            }
+            
+            return sleep(500).then(check);
+        };
+
+        check();
+    });
+
+    await sleep(10);
+    if (isLocked(lockFile)) {
+        return await awaitLock(lockFile);
+    }
+};
+
+nodeCleanup(() => {
+    for (const lockFile of Object.keys(activeLocks)) {
+        releaseLock(lockFile);
+    }
+});
+
+export async function withFileSystemLock<T>(task : () => Promise<T>, lockDir? : string = tmpdir()) : Promise<T> {
+    const lockFile = join(lockDir, LOCK);
+
+    await awaitLock(lockFile);
+    acquireLock(lockFile);
 
     try {
-        result = await task();
-    } catch (err) {
-        releaseLock();
-        throw err;
+        return await task();
+    } finally {
+        releaseLock(lockFile);
     }
-
-    releaseLock();
-
-    return result;
 }
 
 export function sanitizeString(str : string) : string {

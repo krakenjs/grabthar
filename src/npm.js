@@ -3,14 +3,14 @@
 
 import { join } from 'path';
 
-import { ensureDir, move, existsSync, exists, ensureFileSync } from 'fs-extra';
+import { ensureDir, move, exists, readdir } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
 
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
 import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, rmrf, withFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, tryRemove, getTemporaryDirectory } from './util';
+import { sanitizeString, cacheReadWrite, rmrf, withFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, getTemporaryDirectory } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
@@ -103,7 +103,6 @@ type InstallOptions = {|
 |};
 
 export const installSingle = memoizePromise(async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-
     if (!isValidDependencyVersion(version)) {
         throw new Error(`Invalid version for single install: ${ moduleName }@${ version }`);
     }
@@ -130,50 +129,43 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     const packageDir = join(tmpDir, PACKAGE);
     const moduleDir = join(nodeModulesDir, moduleInfo.name);
     const modulePackageDir = join(moduleDir, PACKAGE_JSON);
-    const moduleLock = join(moduleDir, LOCK);
     const moduleParentDir = join(moduleDir, '..');
 
     if (await exists(modulePackageDir)) {
         return;
     }
 
-    if (existsSync(moduleLock)) {
-        throw new Error(`${ moduleDir } is locked, can not install ${ moduleName }`);
-    }
+    await withFileSystemLock(async () => {
+        await ensureDir(tmpDir);
+        await ensureDir(prefix);
+        await ensureDir(nodeModulesDir);
+        await ensureDir(moduleParentDir);
 
-    await ensureDir(tmpDir);
-    await ensureDir(prefix);
-    await ensureDir(nodeModulesDir);
-    await ensureDir(moduleParentDir);
-
-    ensureFileSync(moduleLock);
-    const lockTimer = setTimeout(() => {
-        tryRemove(moduleLock);
-    }, 60 * 1000);
-
-    if (await exists(moduleDir)) {
-        await rmrf(moduleDir);
-    }
-
-    try {
-        await ensureDir(moduleDir);
-        ensureFileSync(moduleLock);
-
-        await download(tarball, tmpDir, { extract: true, filename: packageName });
-        await move(packageDir, moduleDir, { overwrite: true });
-
-        if (!await exists(modulePackageDir)) {
-            throw new Error(`Package not found at ${ modulePackageDir }`);
+        if (await exists(moduleDir)) {
+            for (const file of await readdir(moduleDir)) {
+                if (file === LOCK) {
+                    continue;
+                }
+                await rmrf(join(moduleDir, file));
+            }
         }
-    } catch (err) {
-        await rmrf(moduleDir);
-        throw err;
-    } finally {
-        tryRemove(moduleLock);
-        clearTimeout(lockTimer);
-    }
 
-    await tryRmrf(tmpDir);
+        await ensureDir(moduleDir);
+    
+        try {
+            await download(tarball, tmpDir, { extract: true, filename: packageName });
+            await move(packageDir, moduleDir, { overwrite: true });
+
+            if (!await exists(modulePackageDir)) {
+                throw new Error(`Package not found at ${ modulePackageDir }`);
+            }
+        } catch (err) {
+            await rmrf(moduleDir);
+            throw err;
+        }
+
+        await tryRmrf(tmpDir);
+    }, moduleDir);
 });
 
 export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
