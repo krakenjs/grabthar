@@ -1,6 +1,6 @@
 {
   "name": "grabthar",
-  "version": "4.0.10",
+  "version": "4.0.11",
   "description": "Periodic npm installs in production",
   "main": "index.js",
   "scripts": {
