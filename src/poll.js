@@ -367,16 +367,16 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
 
     const readCache = new LRU(20);
 
-    async function pollerRead(path? : string = '') : Promise<string> {
+    async function pollerRead(path? : string, tag? : ?string) : Promise<string> {
         return await withPoller(async ({ modulePath }) => {
-            const filePath = join(modulePath, path);
+            const filePath = join(modulePath, path || '');
             if (readCache.has(filePath)) {
                 return readCache.get(filePath);
             }
             const file = await readFile(filePath);
             readCache.set(filePath, file);
             return file;
-        });
+        }, tag);
     }
 
     function pollerCancel() {
