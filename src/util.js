@@ -2,6 +2,7 @@
 
 import { join, basename, dirname } from 'path';
 import { homedir, tmpdir } from 'os';
+import { valid as validSemanticVersion } from 'semver';
 
 import { exists, removeSync, writeFileSync, existsSync, ensureDirSync, readFileSync, ensureDir, readdir } from 'fs-extra';
 import rmfr from 'rmfr';
@@ -224,7 +225,7 @@ export async function cacheReadWrite<T>(cacheKey : string, handler : () => Promi
         async () => {
             if (cache) {
                 const result : ?string = await cache.get(cacheKey);
-                
+
                 if (result) {
                     return JSON.parse(result);
                 }
@@ -348,13 +349,13 @@ const awaitLock = async (lockFile : string) => {
 
             const startTime = parseInt(Date.now(), 10);
             const time = getLockTime(lockFile);
-            
+
             if (!time || (startTime - time) > MAX_LOCK_TIME) {
                 releaseLock(lockFile);
                 resolve();
                 return;
             }
-            
+
             return sleep(500).then(check);
         };
 
@@ -399,7 +400,7 @@ export async function rmrf(dir : string) : Promise<void> {
 }
 
 export function isValidDependencyVersion(version : string) : boolean {
-    return Boolean(version.match(/^\d+\.\d+\.\d+$/));
+    return Boolean(validSemanticVersion(version));
 }
 
 export function identity<T>(item : T) : T {
@@ -482,7 +483,7 @@ export function dynamicRequireRelative<T>(name : string, nodeModulesPath : ?stri
             return dynamicRequire(join(nodeModulesPath, name));
         } catch (err) {
             nodeModulesPath = jumpUpDir(nodeModulesPath, NODE_MODULES);
-            
+
             if (!nodeModulesPath) {
                 throw err;
             }
