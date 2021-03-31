@@ -112,6 +112,11 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
 
     const versionInfo = moduleInfo.versions[version];
+
+    if (!versionInfo) {
+        throw new Error(`No version found for ${ moduleName } @ ${ version } - found ${ Object.keys(moduleInfo.versions).join(', ') }`);
+    }
+
     const tarball = versionInfo.dist.tarball;
 
     if (!prefix) {
@@ -161,7 +166,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
             }
         } catch (err) {
             await rmrf(moduleDir);
-            throw err;
+            throw new Error(`Failed to download ${ tarball }\n\n${ err.stack }`);
         }
 
         await tryRmrf(tmpDir);
