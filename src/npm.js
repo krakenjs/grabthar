@@ -117,18 +117,33 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
         throw new Error(`No version found for ${ moduleName } @ ${ version } - found ${ Object.keys(moduleInfo.versions).join(', ') }`);
     }
 
-    const tarball = versionInfo.dist.tarball;
+    const initialTarball = versionInfo.dist.tarball;
 
     if (!prefix) {
         throw new Error(`Prefix required for flat install`);
     }
 
-    if (!tarball) {
+    if (!initialTarball) {
         throw new Error(`Can not find tarball for ${ moduleInfo.name }`);
     }
 
     const nodeModulesDir = join(prefix, NODE_MODULES);
     const packageName = `${ PACKAGE }.tar.gz`;
+    let tarball = initialTarball;
+
+    if (cdnRegistry && !tarball.includes(cdnRegistry)) {
+        try {
+            const initialTarballPathname = new URL(initialTarball).pathname;
+            const newTarballOrigin = new URL(cdnRegistry).origin;
+            tarball = new URL(initialTarballPathname, newTarballOrigin).toString();
+
+        } catch (err) {
+            throw new Error(`Failed to parse tarball url ${ tarball }\n\n${ err.stack }`);
+        }
+
+
+        logger.info(`grabthar_npm_install_dependency_update_tarball_location`, { cdnRegistry, oldTarball: initialTarball, newTarball: tarball });
+    }
 
     const tmpDir = await getTemporaryDirectory(moduleName);
     const packageDir = join(tmpDir, PACKAGE);
@@ -156,7 +171,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
         }
 
         await ensureDir(moduleDir);
-    
+
         try {
             await download(tarball, tmpDir, { extract: true, filename: packageName });
             await move(packageDir, moduleDir, { overwrite: true });
@@ -184,7 +199,7 @@ export const install = async (moduleName : string, version : string, opts : Inst
             const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
             const dependencyVersions = moduleInfo.versions[version].dependencies;
 
-            
+
             logger.info(`grabthar_npm_install_dependencies_${ sanitizedName }`, { version, registry, dependencies: Object.keys(dependencyVersions).join(',') });
 
             for (const dependencyName of Object.keys(dependencyVersions)) {
