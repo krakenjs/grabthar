@@ -107,7 +107,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
     const stability : { [string] : string } = {};
 
     const pollInstall = async () : Promise<ModuleDetails> => {
-        const moduleInfo = await info(name, { logger, cache, registry, cdnRegistry });
+        const { moduleInfo } = await info(name, { logger, cache, registry, cdnRegistry });
 
         let distTagVersion = moduleInfo[DIST_TAGS][tag];
 
