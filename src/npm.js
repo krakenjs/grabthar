@@ -56,7 +56,12 @@ type InfoOptions = {|
     cdnRegistry : ?string
 |};
 
-export const info = memoizePromise(async (moduleName : string, opts : InfoOptions) : Promise<Package> => {
+type InfoResults = {|
+    moduleInfo : Package,
+    fetchedFromCDNRegistry : boolean
+|};
+
+export const info = memoizePromise(async (moduleName : string, opts : InfoOptions) : Promise<InfoResults> => {
     const { logger, cache, registry = NPM_REGISTRY, cdnRegistry } = opts;
 
     const sanitizedName = sanitizeString(moduleName);
@@ -64,12 +69,15 @@ export const info = memoizePromise(async (moduleName : string, opts : InfoOption
 
     const cacheKey = `grabthar_npm_info_${ sanitizedName }_${ sanitizedCDNRegistry }`;
 
-    const { name, versions, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
+    const { name, versions, fetchedFromCDNRegistry, 'dist-tags': distTags } = await cacheReadWrite(cacheKey, async () => {
         let res;
+        let isFromCDNRegistry = false;
 
         if (cdnRegistry) {
             res = await fetch(`${ cdnRegistry }/${ moduleName.replace('@', '') }/${ CDN_REGISTRY_INFO_FILENAME }?cache-bust=${ Math.floor(Date.now() / CDN_REGISTRY_INFO_CACHEBUST_URL_TIME) }`);
-            if (!res.ok) {
+            if (res.ok) {
+                isFromCDNRegistry = true;
+            } else {
                 logger.warn(`grabthar_cdn_registry_failure`, {
                     cdnRegistry, moduleName, status: res.status
                 });
@@ -85,11 +93,14 @@ export const info = memoizePromise(async (moduleName : string, opts : InfoOption
             throw new Error(`npm returned status ${ res.status || 'unknown' } for ${ registry }/${ moduleName }`);
         }
 
-        return extractInfo(await res.json());
-
+        const infoResults = extractInfo(await res.json());
+        return { ...infoResults, fetchedFromCDNRegistry: isFromCDNRegistry };
     }, { logger, cache });
 
-    return { name, versions, 'dist-tags': distTags };
+    return {
+        moduleInfo: { name, versions, 'dist-tags': distTags },
+        fetchedFromCDNRegistry
+    };
 }, { lifetime: INFO_MEMORY_CACHE_LIFETIME });
 
 type InstallOptions = {|
@@ -109,7 +120,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
 
     const { cache, logger, registry = NPM_REGISTRY, cdnRegistry, prefix } = opts;
 
-    const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
+    const { moduleInfo, fetchedFromCDNRegistry } = await info(moduleName, { cache, logger, registry, cdnRegistry });
 
     const versionInfo = moduleInfo.versions[version];
 
@@ -117,11 +128,11 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
         throw new Error(`No version found for ${ moduleName } @ ${ version } - found ${ Object.keys(moduleInfo.versions).join(', ') }`);
     }
 
-    const initialTarball = versionInfo.dist.tarball;
-
     if (!prefix) {
         throw new Error(`Prefix required for flat install`);
     }
+
+    const initialTarball = versionInfo.dist.tarball;
 
     if (!initialTarball) {
         throw new Error(`Can not find tarball for ${ moduleInfo.name }`);
@@ -131,9 +142,9 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     const packageName = `${ PACKAGE }.tar.gz`;
     let tarball = initialTarball;
 
-    if (cdnRegistry && !tarball.includes(cdnRegistry)) {
+    if (cdnRegistry && fetchedFromCDNRegistry && !tarball.includes(cdnRegistry)) {
         try {
-            const initialTarballPathname = new URL(initialTarball).pathname;
+            const initialTarballPathname = new URL(tarball).pathname;
             const newTarballOrigin = new URL(cdnRegistry).origin;
             tarball = new URL(initialTarballPathname, newTarballOrigin).toString();
 
@@ -141,8 +152,7 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
             throw new Error(`Failed to parse tarball url ${ tarball }\n\n${ err.stack }`);
         }
 
-
-        logger.info(`grabthar_npm_install_dependency_update_tarball_location`, { cdnRegistry, oldTarball: initialTarball, newTarball: tarball });
+        logger.info(`grabthar_npm_install_dependency_update_tarball_location`, { cdnRegistry, initialTarball, newTarball: tarball });
     }
 
     const tmpDir = await getTemporaryDirectory(moduleName);
@@ -196,7 +206,7 @@ export const install = async (moduleName : string, version : string, opts : Inst
         const tasks = [];
 
         if (dependencies) {
-            const moduleInfo = await info(moduleName, { cache, logger, registry, cdnRegistry });
+            const { moduleInfo } = await info(moduleName, { cache, logger, registry, cdnRegistry });
             const dependencyVersions = moduleInfo.versions[version].dependencies;
 
 
