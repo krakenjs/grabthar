@@ -179,7 +179,8 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
         }
 
         const version = distTagVersion;
-        const liveModulesDir = await createHomeDirectory(LIVE_MODULES_DIR_NAME);
+        const cdnRegistryLabel = cdnRegistry ? new URL(cdnRegistry).hostname : '';
+        const liveModulesDir = await createHomeDirectory(join(LIVE_MODULES_DIR_NAME, cdnRegistryLabel));
         const prefix = join(liveModulesDir, `${ cleanName(moduleInfo.name) }_${ version }`);
 
         cleanTask = cleanTask || cleanDirectoryTask({

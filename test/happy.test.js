@@ -38,7 +38,7 @@ const NODE_MODULES = 'node_modules';
 beforeEach(async () => {
     poll.flushCache();
     nock.cleanAll();
-    await rmfr(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`));
+    await rmfr(join(homedir(), __LIVE_MODULES__));
 });
 
 test(`Should poll for a module and install it, then return the correct latest version`, async () => {
@@ -193,6 +193,7 @@ test(`Should poll for a module on a cdn registry and install it, then return the
 
         const CDN_PATH = 'foo';
         const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const CDN_REGISTRY_HOSTNAME = new URL(CDN_REGISTRY).hostname;
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
@@ -248,10 +249,10 @@ test(`Should poll for a module on a cdn registry and install it, then return the
         const result = await poller.get();
         await poller.cancel();
 
-        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
         expect(await exists(result.modulePath)).toBeTruthy();
         expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
 
@@ -262,7 +263,7 @@ test(`Should poll for a module on a cdn registry and install it, then return the
         for (const [ dependencyName, dependency ] of entries(result.dependencies)) {
             expect(dependency).toBeTruthy();
             expect(dependency.version).toEqual(MODULE_DEPENDENCIES[dependencyName]);
-            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ dependencyName }`));
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ dependencyName }`));
         }
 
         infoReq.done();
@@ -316,7 +317,7 @@ test(`Should poll for a module and install it with dependencies, then return the
 
         for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
             const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
-            
+
             const dependencyInfoReq = nock(REGISTRY)
                 .get(`/${ dependencyName }`)
                 .reply(200, {
@@ -427,7 +428,7 @@ test(`Should poll for a module and install it with dependencies on a custom regi
 
         for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
             const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
-            
+
             const dependencyInfoReq = nock(REGISTRY)
                 .get(`/${ dependencyName }`)
                 .reply(200, {
@@ -498,6 +499,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
 
         const CDN_PATH = 'foo';
         const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const CDN_REGISTRY_HOSTNAME = new URL(CDN_REGISTRY).hostname;
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
         const MODULE_DEPENDENCIES = {
@@ -547,7 +549,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
 
         for (const [ dependencyName, dependencyVersion ] of entries(MODULE_DEPENDENCIES)) {
             const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
-            
+
             const dependencyInfoReq = nock(CDN_REGISTRY)
                 .get(`/${ dependencyName }/info.json`)
                 .query(keys => {
@@ -592,10 +594,10 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
         const result = await poller.get();
         await poller.cancel();
 
-        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
         expect(await exists(result.modulePath)).toBeTruthy();
         expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
 
@@ -606,7 +608,7 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
         for (const [ dependencyName, dependency ] of entries(result.dependencies)) {
             expect(dependency).toBeTruthy();
             expect(dependency.version).toEqual(MODULE_DEPENDENCIES[dependencyName]);
-            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ dependencyName }`));
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ dependencyName }`));
             expect(await exists(dependency.path)).toBeTruthy();
             expect(await exists(join(dependency.path, 'package.json'))).toBeTruthy();
         }
@@ -625,6 +627,7 @@ test(`Should poll for a module on a cdn registry and install it, fail and fall b
 
         const CDN_PATH = 'foo';
         const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
+        const CDN_REGISTRY_HOSTNAME = new URL(CDN_REGISTRY).hostname;
         const REGISTRY = 'https://registry.npmjs.org';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -686,10 +689,10 @@ test(`Should poll for a module on a cdn registry and install it, fail and fall b
         const result = await poller.get();
         await poller.cancel();
 
-        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
+        expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
 
-        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
+        expect(result.modulePath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ MODULE_NAME }`));
         expect(await exists(result.modulePath)).toBeTruthy();
         expect(await exists(join(result.modulePath, 'package.json'))).toBeTruthy();
 
@@ -700,7 +703,7 @@ test(`Should poll for a module on a cdn registry and install it, fail and fall b
         for (const [ dependencyName, dependency ] of entries(result.dependencies)) {
             expect(dependency).toBeTruthy();
             expect(dependency.version).toEqual(MODULE_DEPENDENCIES[dependencyName]);
-            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ dependencyName }`));
+            expect(dependency.path).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES, `${ dependencyName }`));
         }
 
         infoReq.done();
@@ -906,7 +909,7 @@ test(`Should poll for a module and install it with dependencies, then return the
             }
 
             const tarballUri = `tarballs/${ dependencyName }/${ dependencyVersion }.tgz`;
-            
+
             const dependencyInfoReq = nock(REGISTRY)
                 .get(`/${ dependencyName }`)
                 .reply(200, {
