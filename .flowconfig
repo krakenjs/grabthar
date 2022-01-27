@@ -1,6 +1,7 @@
 [ignore]
 .*/node_modules/babel-plugin-flow-runtime
 .*/node_modules/npm
+.*/node_modules/resolve
 .*/dist
 [include]
 [libs]
