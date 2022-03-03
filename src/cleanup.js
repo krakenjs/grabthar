@@ -4,16 +4,18 @@ import { join } from 'path';
 
 import { readdir, stat } from 'fs-extra';
 
+import type { LoggerType } from './types';
 import { tryRmrf } from './util';
 
 type CleanOptions = {|
     dir : string,
     interval : number,
     threshold : number,
-    onError : ?(mixed) => void
+    onError : ?(mixed) => void,
+    logger : LoggerType
 |};
 
-export function cleanDirectoryTask({ dir, interval, threshold, onError } : CleanOptions) : {| save : (string) => void, cancel : () => void |} {
+export function cleanDirectoryTask({ dir, interval, threshold, onError, logger } : CleanOptions) : {| save : (string) => void, cancel : () => void |} {
     const savePaths = new Set();
     let timer;
 
@@ -29,7 +31,13 @@ export function cleanDirectoryTask({ dir, interval, threshold, onError } : Clean
 
                 const stats = await stat(childDir);
                 if (stats.mtime < (Date.now() - threshold)) {
-                    await tryRmrf(childDir);
+                    try {
+                        await tryRmrf(childDir);
+                        logger.info('grabthar_cleanup_task_successful', { path: childDir });
+                    } catch (_) {
+                        // do nothing
+                    }
+                    
                     continue;
                 }
             }
