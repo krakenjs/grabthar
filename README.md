@@ -1,17 +1,19 @@
-Do it live
-----------
-
 [![build status][build-badge]][build]
 [![code coverage][coverage-badge]][coverage]
 [![npm version][version-badge]][package]
+[![apache license][license-badge]][license]
 
 [build-badge]: https://img.shields.io/github/workflow/status/krakenjs/grabthar/build?logo=github&style=flat-square
-[build]: https://github.com/krakenjs/grabthar/actions?query=workflow%3Abuild
+[build]: https://github.com/krakenjs/grabthar/actions/workflows/main.yml?query=workflow:build
 [coverage-badge]: https://img.shields.io/codecov/c/github/krakenjs/grabthar.svg?style=flat-square
-[coverage]: https://codecov.io/github/krakenjs/grabthar/
+[coverage]: https://codecov.io/github/krakenjs/grabthar
 [version-badge]: https://img.shields.io/npm/v/grabthar.svg?style=flat-square
 [package]: https://www.npmjs.com/package/grabthar
+[license-badge]: https://img.shields.io/npm/l/grabthar.svg?style=flat-square
+[license]: https://github.com/krakenjs/grabthar/blob/main/LICENSE
 
+Do it live
+----------
 Because npm installing in production every 30 seconds is a great idea, right? ...right?
 
 ## Quick Start
