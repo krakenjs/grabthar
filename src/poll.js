@@ -187,7 +187,8 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
             dir:       liveModulesDir,
             interval:  CLEAN_INTERVAL,
             threshold: CLEAN_THRESHOLD,
-            onError
+            onError,
+            logger
         });
 
         cleanTask.save(prefix);
