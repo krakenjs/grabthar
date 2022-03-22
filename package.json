@@ -1,6 +1,6 @@
 {
   "name": "@krakenjs/grabthar",
-  "version": "4.0.16",
+  "version": "5.0.0",
   "description": "Periodic npm installs in production",
   "main": "index.js",
   "scripts": {
