@@ -11,9 +11,9 @@
     "lint": "eslint src/ test/ *.js",
     "jest": "jest test --env=node --no-cache --coverage --collectCoverageFrom=./src --verbose --runInBand",
     "prepare": "husky install",
-    "prerelease": "npm run clean && npm run build && git add dist && git commit -m 'ci: check in dist folder' || echo 'Nothing to distribute'",
+    "prerelease": "npm run babel",
     "release": "standard-version",
-    "postrelease": "git push && git push --follow-tags && npm publish"
+    "postrelease": "git checkout ./src && git push --follow-tags && npm publish"
   },
   "repository": {
     "type": "git",
