@@ -19,7 +19,7 @@ Because npm installing in production every 30 seconds is a great idea, right? ..
 ## Quick Start
 
 ```bash
-npm install --save grabthar
+npm install --save @krakenjs/grabthar
 ```
 
 ## Examples
@@ -27,7 +27,7 @@ npm install --save grabthar
 Hot deploy and serve up static files:
 
 ```javascript
-import { poll } from 'grabthar';
+import { poll } from '@krakenjs/grabthar';
 
 let watcher = poll({
   name: 'my-live-updating-module'
@@ -42,7 +42,7 @@ app.get('/foo.js', async function handleRequest(req, res) {
 Or if you're feeling *really* brave, hot deploy and require new code:
 
 ```javascript
-import { poll } from 'grabthar';
+import { poll } from '@krakenjs/grabthar';
 
 let watcher = poll({
   name: 'my-live-updating-module'
@@ -72,7 +72,7 @@ This will automatically set the `latest` tag to the latest version.
 To separate out the deployment and activation of new code, you can make use of different npm dist-tags:
 
 ```javascript
-import { poll } from 'grabthar';
+import { poll } from '@krakenjs/grabthar';
 
 let watcher = poll({
   name: 'my-live-updating-module',
@@ -120,7 +120,7 @@ npm dist-tag add my-live-updating-module@x.x.x release
 const {
 
   // The root directory where the module is installed, e.g.
-  // /Users/zippy/__live_modules__/my-live-updating-module_1.3.53 
+  // /Users/zippy/__live_modules__/my-live-updating-module_1.3.53
   moduleRoot,
 
   // The full path to the node_modules installed, e.g.
