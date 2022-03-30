@@ -2,7 +2,12 @@
 
 import { join } from 'path';
 
-import compareVersions from 'compare-versions';
+import {
+    gt as greaterThanVersion,
+    lt as lessThanVersion,
+    rcompare as compareVersionsDescending,
+    major
+} from 'semver';
 import LRU from 'lru-cache';
 import { readFile } from 'fs-extra';
 
@@ -80,10 +85,6 @@ type DistPoller = {|
     stop : () => void
 |};
 
-function getMajorVersion(version : string) : string {
-    return version.split('.')[0];
-}
-
 type PollInstallDistTagOptions = {|
     name : string,
     tag : string,
@@ -101,67 +102,47 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
     const pollInstall = async () : Promise<ModuleDetails> => {
         const { moduleInfo } = await info(name, { logger, cache, registry, cdnRegistry });
 
-        const distTagVersion = moduleInfo[DIST_TAGS][tag];
+        const currentVersion = moduleInfo[DIST_TAGS][tag];
 
-        if (!distTagVersion) {
+        if (!currentVersion) {
             throw new Error(`No ${ tag } tag found for ${ name } - ${ JSON.stringify(moduleInfo[DIST_TAGS]) }`);
         }
 
-        const moduleVersions = Object.keys(moduleInfo.versions)
-            .filter(ver => ver.match(/^\d+\.\d+\.\d+$/))
-            .sort(compareVersions)
-            .reverse();
+        const isVersionEligible = version => {
+            const doVersionsShareMajor = major(version) === major(currentVersion);
+            const isVersionLessThanCurrent = lessThanVersion(version, currentVersion);
 
-        const majorVersion = getMajorVersion(distTagVersion);
+            return isValidDependencyVersion(version) && doVersionsShareMajor && isVersionLessThanCurrent;
+        };
 
-        const eligibleVersions = moduleVersions.filter(ver => {
-                
-            // Only allow x.x.x versions
-            if (!isValidDependencyVersion(ver)) {
-                return false;
-            }
+        const eligibleVersions = Object.keys(moduleInfo.versions)
+            .filter(isVersionEligible)
+            .sort(compareVersionsDescending);
 
-            // Do not allow versions that are not the major version of the dist-tag
-            if (getMajorVersion(ver) !== majorVersion) {
-                return false;
-            }
-
-            // Do not allow versions ahead of the current dist-tag
-            if (compareVersions(ver, distTagVersion) === 1) {
-                return false;
-            }
-
-            return true;
-        });
-
-        if (!eligibleVersions.length) {
-            throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
-        }
-
-        if (!eligibleVersions.length) {
-            throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
-        }
-
-        const previousVersions = eligibleVersions.filter(ver => {
-            return compareVersions(distTagVersion, ver) === 1;
-        });
-            
+        const previousVersions = eligibleVersions.filter(version => greaterThanVersion(currentVersion, version));
         const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
-        const version = distTagVersion;
         const cdnRegistryLabel = cdnRegistry ? new URL(cdnRegistry).hostname : '';
         const liveModulesDir = await createHomeDirectory(join(LIVE_MODULES_DIR_NAME, cdnRegistryLabel));
-        const prefix = join(liveModulesDir, `${ cleanName(moduleInfo.name) }_${ version }`);
+        const prefix = join(liveModulesDir, `${ cleanName(moduleInfo.name) }_${ currentVersion }`);
 
         const { nodeModulesPath, modulePath, dependencies: moduleDependencies } = await installVersion({
-            moduleInfo, version, dependencies, registry, logger, cache, cdnRegistry, childModules, prefix
+            cache,
+            cdnRegistry,
+            childModules,
+            dependencies,
+            logger,
+            moduleInfo,
+            prefix,
+            registry,
+            version: currentVersion
         });
 
         return {
-            nodeModulesPath,
             modulePath,
-            version,
+            nodeModulesPath,
             previousVersion,
-            dependencies: moduleDependencies
+            dependencies: moduleDependencies,
+            version:      currentVersion
         };
     };
 

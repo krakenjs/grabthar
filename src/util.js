@@ -3,6 +3,7 @@
 import { join, basename, dirname } from 'path';
 import { homedir, tmpdir } from 'os';
 
+import { valid, prerelease } from 'semver';
 import { exists, removeSync, writeFileSync, existsSync, ensureDirSync, readFileSync, ensureDir, readdir } from 'fs-extra';
 import rmfr from 'rmfr';
 import uuid from 'uuid';
@@ -399,7 +400,7 @@ export async function rmrf(dir : string) : Promise<void> {
 }
 
 export function isValidDependencyVersion(version : string) : boolean {
-    return Boolean(version.match(/^\d+\.\d+\.\d+$/));
+    return valid(version) && prerelease(version) === null;
 }
 
 export function identity<T>(item : T) : T {
