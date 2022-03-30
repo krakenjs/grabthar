@@ -9,9 +9,8 @@ import { readFile } from 'fs-extra';
 import type { LoggerType, CacheType } from './types';
 import { install, info, type Package, clearCache } from './npm';
 import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity, dynamicRequire, dynamicRequireRelative } from './util';
-import { LIVE_MODULES_DIR_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY, CLEAN_INTERVAL, CLEAN_THRESHOLD } from './config';
+import { LIVE_MODULES_DIR_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY } from './config';
 import { DIST_TAG, NODE_MODULES, PACKAGE_JSON, DIST_TAGS } from './constants';
-import { cleanDirectoryTask } from './cleanup';
 
 type InstallResult = {|
     nodeModulesPath : string,
@@ -98,8 +97,6 @@ type PollInstallDistTagOptions = {|
     childModules : ?$ReadOnlyArray<string>
 |};
 
-let cleanTask;
-
 function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = false, logger, cache, registry = NPM_REGISTRY, cdnRegistry, childModules } : PollInstallDistTagOptions) : DistPoller {
     const pollInstall = async () : Promise<ModuleDetails> => {
         const { moduleInfo } = await info(name, { logger, cache, registry, cdnRegistry });
@@ -155,16 +152,6 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
         const liveModulesDir = await createHomeDirectory(join(LIVE_MODULES_DIR_NAME, cdnRegistryLabel));
         const prefix = join(liveModulesDir, `${ cleanName(moduleInfo.name) }_${ version }`);
 
-        cleanTask = cleanTask || cleanDirectoryTask({
-            dir:       liveModulesDir,
-            interval:  CLEAN_INTERVAL,
-            threshold: CLEAN_THRESHOLD,
-            onError,
-            logger
-        });
-
-        cleanTask.save(prefix);
-
         const { nodeModulesPath, modulePath, dependencies: moduleDependencies } = await installVersion({
             moduleInfo, version, dependencies, registry, logger, cache, cdnRegistry, childModules, prefix
         });
@@ -187,7 +174,6 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
     return {
         stop:       () => {
             poller.stop();
-            cleanTask.cancel();
         },
         result:     async () => await poller.result()
     };
