@@ -5,13 +5,16 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 import nock from 'nock';
-import { test, expect } from '@jest/globals';
+import { test, expect, jest, describe, afterEach } from '@jest/globals';
 import { exists } from 'fs-extra';
 import rmfr from 'rmfr';
 
-import { wrapPromise, entries } from './lib';
-
 import { poll } from '../src';
+
+export function entries<T>(obj : { [string] : T }) : $ReadOnlyArray<[ string, T ]> {
+    // $FlowFixMe
+    return Object.entries(obj);
+}
 
 const logger = {
     debug: () => {
@@ -35,15 +38,14 @@ const MODULE_VERSION = '1.3.53';
 const __LIVE_MODULES__ = '__live_modules__';
 const NODE_MODULES = 'node_modules';
 
-beforeEach(async () => {
-    poll.flushCache();
-    nock.cleanAll();
-    await rmfr(join(homedir(), __LIVE_MODULES__));
-});
+describe('happy path tests', () => {
+    afterEach(async () => {
+        poll.flushCache();
+        nock.cleanAll();
+        await rmfr(join(homedir(), __LIVE_MODULES__));
+    });
 
-test(`Should poll for a module and install it, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it, then return the correct latest version`, async () => {
         const REGISTRY = 'https://registry.npmjs.org';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -83,14 +85,18 @@ test(`Should poll for a module and install it, then return the correct latest ve
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:   onErrorCallback,
             logger
         });
 
         const result = await poller.get();
+
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -112,11 +118,8 @@ test(`Should poll for a module and install it, then return the correct latest ve
         infoReq.done();
         tarballReq.done();
     });
-});
 
-test(`Should poll for a module on a custom registry and install it, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module on a custom registry and install it, then return the correct latest version`, async () => {
         const REGISTRY = 'https://npm.paypal.com';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -156,15 +159,18 @@ test(`Should poll for a module on a custom registry and install it, then return 
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:   onErrorCallback,
             registry:     REGISTRY,
             logger
         });
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -186,11 +192,8 @@ test(`Should poll for a module on a custom registry and install it, then return 
         infoReq.done();
         tarballReq.done();
     });
-});
 
-test(`Should poll for a module on a cdn registry and install it, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module on a cdn registry and install it, then return the correct latest version`, async () => {
         const CDN_PATH = 'foo';
         const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
         const CDN_REGISTRY_HOSTNAME = new URL(CDN_REGISTRY).hostname;
@@ -239,15 +242,18 @@ test(`Should poll for a module on a cdn registry and install it, then return the
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:     onErrorCallback,
             cdnRegistry:  CDN_REGISTRY,
             logger
         });
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -269,11 +275,8 @@ test(`Should poll for a module on a cdn registry and install it, then return the
         infoReq.done();
         tarballReq.done();
     });
-});
 
-test(`Should poll for a module and install it with dependencies, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it with dependencies, then return the correct latest version`, async () => {
         const REGISTRY = 'https://registry.npmjs.org';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -343,16 +346,18 @@ test(`Should poll for a module and install it with dependencies, then return the
             dependencyNocks.push(dependencyInfoReq);
             dependencyNocks.push(dependencyTarballReq);
         }
-
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:      onErrorCallback,
             logger,
             dependencies: true
         });
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -380,11 +385,8 @@ test(`Should poll for a module and install it with dependencies, then return the
             dependencyNock.done();
         }
     });
-});
 
-test(`Should poll for a module and install it with dependencies on a custom registry, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it with dependencies on a custom registry, then return the correct latest version`, async () => {
         const REGISTRY = 'https://npm.paypal.com';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -455,9 +457,10 @@ test(`Should poll for a module and install it with dependencies on a custom regi
             dependencyNocks.push(dependencyTarballReq);
         }
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:      onErrorCallback,
             logger,
             dependencies: true,
             registry:     REGISTRY
@@ -465,6 +468,8 @@ test(`Should poll for a module and install it with dependencies on a custom regi
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -492,11 +497,8 @@ test(`Should poll for a module and install it with dependencies on a custom regi
             dependencyNock.done();
         }
     });
-});
 
-test(`Should poll for a module and install it with dependencies on a cdn registry, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it with dependencies on a cdn registry, then return the correct latest version`, async () => {
         const CDN_PATH = 'foo';
         const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
         const CDN_REGISTRY_HOSTNAME = new URL(CDN_REGISTRY).hostname;
@@ -583,9 +585,10 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
             dependencyNocks.push(dependencyTarballReq);
         }
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:      onErrorCallback,
             logger,
             dependencies: true,
             cdnRegistry:  CDN_REGISTRY
@@ -593,6 +596,8 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -620,11 +625,8 @@ test(`Should poll for a module and install it with dependencies on a cdn registr
             dependencyNock.done();
         }
     });
-});
 
-test(`Should poll for a module on a cdn registry and install it, fail and fall back to npm, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module on a cdn registry and install it, fail and fall back to npm, then return the correct latest version`, async () => {
         const CDN_PATH = 'foo';
         const CDN_REGISTRY = `https://www.paypalobjects.com/${ CDN_PATH }`;
         const CDN_REGISTRY_HOSTNAME = new URL(CDN_REGISTRY).hostname;
@@ -679,15 +681,18 @@ test(`Should poll for a module on a cdn registry and install it, fail and fall b
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:     onErrorCallback,
             cdnRegistry:  CDN_REGISTRY,
             logger
         });
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, CDN_REGISTRY_HOSTNAME, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -710,11 +715,8 @@ test(`Should poll for a module on a cdn registry and install it, fail and fall b
         fallbackInfoReq.done();
         fallbackTarballReq.done();
     });
-});
 
-test(`Should poll for a module and install it with caching, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it with caching, then return the correct latest version`, async () => {
         const REGISTRY = 'https://registry.npmjs.org';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -765,15 +767,18 @@ test(`Should poll for a module and install it with caching, then return the corr
             }
         };
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:   onErrorCallback,
             cache,
             logger
         });
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
@@ -795,11 +800,8 @@ test(`Should poll for a module and install it with caching, then return the corr
         infoReq.done();
         tarballReq.done();
     });
-});
 
-test(`Should poll for a module and install it, then import it`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it, then import it`, async () => {
         const REGISTRY = 'https://registry.npmjs.org';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -839,11 +841,14 @@ test(`Should poll for a module and install it, then import it`, async () => {
             .get(`/${ TARBALL }`)
             .replyWithFile(200, `${ __dirname  }/mocks/package.tgz`);
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:   onErrorCallback,
             logger
         });
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         const { getValue } = await poller.import();
         expect(await getValue('foo')).toEqual('foo');
@@ -856,11 +861,8 @@ test(`Should poll for a module and install it, then import it`, async () => {
         infoReq.done();
         tarballReq.done();
     });
-});
 
-test(`Should poll for a module and install it with dependencies, then return the correct latest version`, async () => {
-    await wrapPromise(async (reject) => {
-
+    test(`Should poll for a module and install it with dependencies, then return the correct latest version`, async () => {
         const REGISTRY = 'https://registry.npmjs.org';
         const MODULE_PREVIOUS_VERSION = '1.3.52';
         const TARBALL = `tarballs/${ MODULE_NAME }/${ MODULE_VERSION }.tgz`;
@@ -936,9 +938,10 @@ test(`Should poll for a module and install it with dependencies, then return the
             dependencyNocks.push(dependencyTarballReq);
         }
 
+        const onErrorCallback = jest.fn();
         const poller = poll({
             name:         MODULE_NAME,
-            onError:      reject,
+            onError:      onErrorCallback,
             logger,
             dependencies: true,
             childModules: CHILD_MODULES
@@ -946,6 +949,8 @@ test(`Should poll for a module and install it with dependencies, then return the
 
         const result = await poller.get();
         await poller.cancel();
+
+        expect(onErrorCallback).not.toHaveBeenCalled();
 
         expect(result.nodeModulesPath).toEqual(join(homedir(), __LIVE_MODULES__, `${ MODULE_NAME }_${ MODULE_VERSION }`, NODE_MODULES));
         expect(await exists(result.nodeModulesPath)).toBeTruthy();
