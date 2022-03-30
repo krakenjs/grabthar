@@ -10,7 +10,7 @@ import type { LoggerType, CacheType } from './types';
 import { install, info, type Package, clearCache } from './npm';
 import { poll, createHomeDirectory, resolveNodeModulesDirectory, resolveModuleDirectory, isValidDependencyVersion, identity, dynamicRequire, dynamicRequireRelative } from './util';
 import { LIVE_MODULES_DIR_NAME, NPM_POLL_INTERVAL, NPM_REGISTRY, CLEAN_INTERVAL, CLEAN_THRESHOLD } from './config';
-import { DIST_TAG, NODE_MODULES, STABILITY, PACKAGE_JSON, DIST_TAGS } from './constants';
+import { DIST_TAG, NODE_MODULES, PACKAGE_JSON, DIST_TAGS } from './constants';
 import { cleanDirectoryTask } from './cleanup';
 
 type InstallResult = {|
@@ -78,9 +78,7 @@ type ModuleDetails = {|
 
 type DistPoller = {|
     result : () => Promise<ModuleDetails>,
-    stop : () => void,
-    markStable : (string) => void,
-    markUnstable : (string) => void
+    stop : () => void
 |};
 
 function getMajorVersion(version : string) : string {
@@ -103,13 +101,10 @@ type PollInstallDistTagOptions = {|
 let cleanTask;
 
 function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = false, logger, cache, registry = NPM_REGISTRY, cdnRegistry, childModules } : PollInstallDistTagOptions) : DistPoller {
-    
-    const stability : { [string] : string } = {};
-
     const pollInstall = async () : Promise<ModuleDetails> => {
         const { moduleInfo } = await info(name, { logger, cache, registry, cdnRegistry });
 
-        let distTagVersion = moduleInfo[DIST_TAGS][tag];
+        const distTagVersion = moduleInfo[DIST_TAGS][tag];
 
         if (!distTagVersion) {
             throw new Error(`No ${ tag } tag found for ${ name } - ${ JSON.stringify(moduleInfo[DIST_TAGS]) }`);
@@ -120,7 +115,6 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
             .sort(compareVersions)
             .reverse();
 
-        stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
         const majorVersion = getMajorVersion(distTagVersion);
 
         const eligibleVersions = moduleVersions.filter(ver => {
@@ -140,11 +134,6 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
                 return false;
             }
 
-            // Do not allow versions marked as unstable
-            if (stability[ver] === STABILITY.UNSTABLE) {
-                return false;
-            }
-
             return true;
         });
 
@@ -152,32 +141,15 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
             throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
         }
 
-        const stableVersions = eligibleVersions.filter(ver => {
-            if (stability[ver] === STABILITY.UNSTABLE) {
-                return false;
-            }
-
-            return true;
-        });
-
-        if (!stableVersions.length) {
+        if (!eligibleVersions.length) {
             throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
         }
 
-        const previousVersions = stableVersions.filter(ver => {
+        const previousVersions = eligibleVersions.filter(ver => {
             return compareVersions(distTagVersion, ver) === 1;
         });
             
         const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
-
-        if (stability[distTagVersion] === STABILITY.UNSTABLE) {
-            if (!previousVersion) {
-                throw new Error(`${ name }@${ distTagVersion } and no previous stable version to fall back on`);
-            }
-
-            distTagVersion = previousVersion;
-        }
-
         const version = distTagVersion;
         const cdnRegistryLabel = cdnRegistry ? new URL(cdnRegistry).hostname : '';
         const liveModulesDir = await createHomeDirectory(join(LIVE_MODULES_DIR_NAME, cdnRegistryLabel));
@@ -217,13 +189,7 @@ function pollInstallDistTag({ name, onError, tag, period = 20, dependencies = fa
             poller.stop();
             cleanTask.cancel();
         },
-        result:     async () => await poller.result(),
-        markStable: (version : string) => {
-            stability[version] = STABILITY.STABLE;
-        },
-        markUnstable: (version : string) => {
-            stability[version] = STABILITY.UNSTABLE;
-        }
+        result:     async () => await poller.result()
     };
 }
 
@@ -232,9 +198,7 @@ type NpmWatcher<T : Object> = {|
     read : (path? : string) => Promise<string>,
     import : (?string) => Promise<T>,
     importDependency : (string, ?string) => Promise<T>,
-    cancel : () => void,
-    markStable : (string) => void,
-    markUnstable : (string) => void
+    cancel : () => void
 |};
 
 type NPMPollOptions = {|
@@ -387,26 +351,12 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
         }
     }
 
-    function pollerMarkStable(version : string) {
-        for (const tag of tags) {
-            pollers[tag].markStable(version);
-        }
-    }
-
-    function pollerMarkUnstable(version : string) {
-        for (const tag of tags) {
-            pollers[tag].markUnstable(version);
-        }
-    }
-
     return {
         get:              pollerGet,
         import:           pollerImport,
         importDependency: pollerImportDependency,
         read:             pollerRead,
-        cancel:           pollerCancel,
-        markStable:       pollerMarkStable,
-        markUnstable:     pollerMarkUnstable
+        cancel:           pollerCancel
     };
 }
 
