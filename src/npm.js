@@ -10,7 +10,7 @@ import fetch from 'node-fetch';
 
 import type { CacheType, LoggerType } from './types';
 import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME, LIVE_MODULES_DIR_NAME } from './config';
-import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK, DIST_TAGS, STABILITY } from './constants';
+import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK, DIST_TAGS, STABILITY, DIST_TAG } from './constants';
 import { sanitizeString, cacheReadWrite, rmrf, withFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, getTemporaryDirectory, createHomeDirectory } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
@@ -236,7 +236,7 @@ function cleanName(name : string) : string {
     return name.replace(/\//g, '-');
 }
 
-export async function installVersion({ name, stability, tag, dependencies = false, registry = NPM_REGISTRY, logger, cache, cdnRegistry, childModules } : InstallVersionOptions) : Promise<InstallResult> {
+export async function installVersion({ name, stability = {}, tag = DIST_TAG.LATEST, dependencies = false, registry = NPM_REGISTRY, logger, cache, cdnRegistry, childModules } : InstallVersionOptions) : Promise<InstallResult> {
     const { moduleInfo } = await info(name, { logger, cache, registry, cdnRegistry });
 
     let distTagVersion = moduleInfo[DIST_TAGS][tag];
