@@ -6,10 +6,11 @@
   "scripts": {
     "flow-typed": "rm -rf ./flow-typed && flow-typed install",
     "babel": "babel src --ignore=node_modules --out-dir src --source-maps inline",
-    "test": "npm run lint && npm run flow-typed && npm run flow && npm run jest",
+    "test": "npm run lint && npm run flow-typed && npm run flow && npm run jest:ci",
     "flow": "flow",
     "lint": "eslint src/ test/ *.js",
-    "jest": "jest test --env=node --no-cache --coverage --collectCoverageFrom=./src --verbose --runInBand",
+    "jest": "jest test --env=node",
+    "jest:ci": "npm run jest -- --no-cache --coverage --collectCoverageFrom=./src --verbose --runInBand",
     "prepare": "husky install",
     "prerelease": "npm run babel",
     "release": "standard-version",
