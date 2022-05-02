@@ -14,7 +14,7 @@
     "prepare": "husky install",
     "prerelease": "npm run babel",
     "release": "standard-version",
-    "postrelease": "git checkout ./src && git push --follow-tags && npm publish"
+    "postrelease": "git push --follow-tags && npm publish && git checkout ./src && git clean -f"
   },
   "repository": {
     "type": "git",
