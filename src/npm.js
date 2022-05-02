@@ -3,18 +3,19 @@
 
 import { join } from 'path';
 
+import compareVersions from 'compare-versions';
 import { ensureDir, move, exists, readdir } from 'fs-extra';
 import download from 'download';
 import fetch from 'node-fetch';
 
 import type { CacheType, LoggerType } from './types';
-import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME } from './config';
-import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK } from './constants';
-import { sanitizeString, cacheReadWrite, rmrf, withFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, getTemporaryDirectory } from './util';
+import { NPM_REGISTRY, CDN_REGISTRY_INFO_FILENAME, CDN_REGISTRY_INFO_CACHEBUST_URL_TIME, INFO_MEMORY_CACHE_LIFETIME, LIVE_MODULES_DIR_NAME } from './config';
+import { NODE_MODULES, PACKAGE, PACKAGE_JSON, LOCK, DIST_TAGS, STABILITY } from './constants';
+import { sanitizeString, cacheReadWrite, rmrf, withFileSystemLock, isValidDependencyVersion, memoizePromise, tryRmrf, getTemporaryDirectory, createHomeDirectory } from './util';
 
 process.env.NO_UPDATE_NOTIFIER = 'true';
 
-export type Package = {|
+type Package = {|
     'name' : string,
     'versions' : {
         [string] : {|
@@ -198,15 +199,127 @@ export const installSingle = memoizePromise(async (moduleName : string, version 
     }, moduleDir);
 });
 
-export const install = async (moduleName : string, version : string, opts : InstallOptions) : Promise<void> => {
-    return await withFileSystemLock(async () => {
-        const { cache, logger, dependencies = false, registry = NPM_REGISTRY, cdnRegistry, childModules } = opts;
+export function clearCache() {
+    cacheReadWrite.clear();
+}
+
+type InstallVersionOptions = {|
+    name : string,
+    stability : Object,
+    tag : string,
+    dependencies? : boolean,
+    logger : LoggerType,
+    cache : ?CacheType,
+    registry : string,
+    cdnRegistry : ?string,
+    childModules : ?$ReadOnlyArray<string>
+|};
+
+type InstallResult = {|
+    version : string,
+    previousVersion : string,
+    nodeModulesPath : string,
+    modulePath : string,
+    dependencies : {
+        [string] : {|
+            version : string,
+            path : string
+        |}
+    }
+|};
+
+function getMajorVersion(version : string) : string {
+    return version.split('.')[0];
+}
+
+function cleanName(name : string) : string {
+    return name.replace(/\//g, '-');
+}
+
+export async function installVersion({ name, stability, tag, dependencies = false, registry = NPM_REGISTRY, logger, cache, cdnRegistry, childModules } : InstallVersionOptions) : Promise<InstallResult> {
+    const { moduleInfo } = await info(name, { logger, cache, registry, cdnRegistry });
+
+    let distTagVersion = moduleInfo[DIST_TAGS][tag];
+
+    if (!distTagVersion) {
+        throw new Error(`No ${ tag } tag found for ${ name } - ${ JSON.stringify(moduleInfo[DIST_TAGS]) }`);
+    }
+
+    const moduleVersions = Object.keys(moduleInfo.versions)
+        .filter(ver => ver.match(/^\d+\.\d+\.\d+$/))
+        .sort(compareVersions)
+        .reverse();
+
+    stability[distTagVersion] = stability[distTagVersion] || STABILITY.STABLE;
+    const majorVersion = getMajorVersion(distTagVersion);
+
+    const eligibleVersions = moduleVersions.filter(ver => {
+            
+        // Only allow x.x.x versions
+        if (!isValidDependencyVersion(ver)) {
+            return false;
+        }
+
+        // Do not allow versions that are not the major version of the dist-tag
+        if (getMajorVersion(ver) !== majorVersion) {
+            return false;
+        }
+
+        // Do not allow versions ahead of the current dist-tag
+        if (compareVersions(ver, distTagVersion) === 1) {
+            return false;
+        }
+
+        // Do not allow versions marked as unstable
+        if (stability[ver] === STABILITY.UNSTABLE) {
+            return false;
+        }
+
+        return true;
+    });
+
+    if (!eligibleVersions.length) {
+        throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
+    }
+
+    const stableVersions = eligibleVersions.filter(ver => {
+        if (stability[ver] === STABILITY.UNSTABLE) {
+            return false;
+        }
+
+        return true;
+    });
+
+    if (!stableVersions.length) {
+        throw new Error(`No eligible versions found for module ${ name } -- from [ ${ moduleVersions.join(', ') } ]`);
+    }
+
+    const previousVersions = stableVersions.filter(ver => {
+        return compareVersions(distTagVersion, ver) === 1;
+    });
+        
+    const previousVersion = previousVersions.length ? previousVersions[0] : eligibleVersions[0];
+
+    if (stability[distTagVersion] === STABILITY.UNSTABLE) {
+        if (!previousVersion) {
+            throw new Error(`${ name }@${ distTagVersion } and no previous stable version to fall back on`);
+        }
+
+        distTagVersion = previousVersion;
+    }
+
+    const version = distTagVersion;
+    const cdnRegistryLabel = cdnRegistry ? new URL(cdnRegistry).hostname : '';
+    const liveModulesDir = await createHomeDirectory(join(LIVE_MODULES_DIR_NAME, cdnRegistryLabel));
+    const prefix = join(liveModulesDir, `${ cleanName(moduleInfo.name) }_${ version }`);
+    const moduleName = moduleInfo.name;
+
+    await withFileSystemLock(async () => {
         const sanitizedName = sanitizeString(moduleName);
 
         const tasks = [];
 
         if (dependencies) {
-            const { moduleInfo } = await info(moduleName, { cache, logger, registry, cdnRegistry });
             const dependencyVersions = moduleInfo.versions[version].dependencies;
 
 
@@ -225,12 +338,12 @@ export const install = async (moduleName : string, version : string, opts : Inst
                 }
 
                 const dependencyVersion = dependencyVersions[dependencyName];
-                tasks.push(installSingle(dependencyName, dependencyVersion, opts));
+                tasks.push(installSingle(dependencyName, dependencyVersion, { prefix, cache, logger, dependencies, registry, cdnRegistry, childModules }));
             }
         }
 
         logger.info(`grabthar_npm_install_${ sanitizedName }`, { version, registry });
-        tasks.push(installSingle(moduleName, version, opts));
+        tasks.push(installSingle(moduleName, version, { prefix, cache, logger, dependencies, registry, cdnRegistry, childModules }));
 
         try {
             await Promise.all(tasks);
@@ -239,8 +352,25 @@ export const install = async (moduleName : string, version : string, opts : Inst
             throw err;
         }
     });
-};
+    
+    const nodeModulesPath = join(prefix, NODE_MODULES);
+    const modulePath = join(nodeModulesPath, moduleInfo.name);
+    const moduleDependencies = {};
 
-export function clearCache() {
-    cacheReadWrite.clear();
+    const versionInfo = moduleInfo.versions[version];
+
+    for (const dependencyName of Object.keys(versionInfo.dependencies)) {
+        moduleDependencies[dependencyName] = {
+            version: versionInfo.dependencies[dependencyName],
+            path:    join(nodeModulesPath, dependencyName)
+        };
+    }
+
+    return {
+        nodeModulesPath,
+        modulePath,
+        dependencies: moduleDependencies,
+        version,
+        previousVersion
+    };
 }
