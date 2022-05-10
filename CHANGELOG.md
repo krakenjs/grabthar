@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [6.0.0](https://github.com/krakenjs/grabthar/compare/v5.0.0...v6.0.0) (2022-05-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* expose install version
+
+### Features
+
+* expose install version ([2cef61f](https://github.com/krakenjs/grabthar/commit/2cef61fb784724934d617adb55ece41e376310b4))
+* expose node_modules fallback ([3357132](https://github.com/krakenjs/grabthar/commit/3357132dd94103329a6347b711946046335d554f))
+
+
+* defaults for install version ([#19](https://github.com/krakenjs/grabthar/issues/19)) ([bcd30aa](https://github.com/krakenjs/grabthar/commit/bcd30aab03f7fcbe8cfadc4c58e562686743af63))
+* move devDependencies to [@krakenjs](https://github.com/krakenjs) scope ([da63b1b](https://github.com/krakenjs/grabthar/commit/da63b1b46bf6a1fe8903f07dac0dce5d2d79a3a5))
+
 ## [5.0.0](https://github.com/krakenjs/grabthar/compare/v4.0.14...v5.0.0) (2022-03-22)
 
 
