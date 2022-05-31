@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [6.1.1](https://github.com/krakenjs/grabthar/compare/v6.1.0...v6.1.1) (2022-05-31)
+
+
+### Bug Fixes
+
+* actually expose import dependency ([#21](https://github.com/krakenjs/grabthar/issues/21)) ([6111272](https://github.com/krakenjs/grabthar/commit/6111272e6718f78efa061dbfe46128178cf915d7))
+
 ## [6.1.0](https://github.com/krakenjs/grabthar/compare/v6.0.0...v6.1.0) (2022-05-31)
 
 
