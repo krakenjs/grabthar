@@ -154,6 +154,18 @@ export async function getFallback(name : string) : Promise<ModuleDetails> {
     };
 }
 
+export const importDependency = async ({ dependencyName, path, moduleDetails } : {|dependencyName : string, path : ?string, moduleDetails : ModuleDetails |}) => {
+    const nodeModulesDir = await resolveNodeModulesDirectory(moduleDetails.modulePath);
+
+    if (!nodeModulesDir) {
+        throw new Error(`Can not find node modules for ${ moduleDetails.modulePath }`);
+    }
+
+    const relativePath = path ? join(dependencyName, path) : dependencyName;
+
+    return dynamicRequireRelative(relativePath, nodeModulesDir);
+};
+
 export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, registry = NPM_REGISTRY, logger = defaultLogger, cache, dependencies = false, fallback = true, cdnRegistry, childModules } : NPMPollOptions) : NpmWatcher<Object> {
 
     const pollers = {};
@@ -209,16 +221,7 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     }
 
     async function pollerImportDependency <T : Object>(dependencyName, path, tag? : ?string) : Promise<T> {
-        return await withPoller(async ({ modulePath }) => {
-            const nodeModulesDir = await resolveNodeModulesDirectory(modulePath);
-
-            if (!nodeModulesDir) {
-                throw new Error(`Can not find node modules for ${ modulePath }`);
-            }
-
-            const relativePath = path ? join(dependencyName, path) : dependencyName;
-            return dynamicRequireRelative(relativePath, nodeModulesDir);
-        }, tag);
+        return await withPoller((moduleDetails) => importDependency({ dependencyName, path, moduleDetails }), tag);
     }
 
     const readCache = new LRU(20);
