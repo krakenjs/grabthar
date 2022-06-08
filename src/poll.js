@@ -11,6 +11,15 @@ import { poll, resolveNodeModulesDirectory, resolveModuleDirectory, identity, dy
 import { NPM_POLL_INTERVAL, NPM_REGISTRY } from './config';
 import { DIST_TAG, STABILITY, PACKAGE_JSON } from './constants';
 
+
+let readCache;
+
+const setupReadCache = () => {
+    if (!readCache) {
+        readCache = new LRU(20);
+    }
+};
+
 export type ModuleDetails = {|
     nodeModulesPath : string,
     modulePath : string,
@@ -166,8 +175,28 @@ export const importDependency = async ({ dependencyName, path, moduleDetails } :
     return dynamicRequireRelative(relativePath, nodeModulesDir);
 };
 
-export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, registry = NPM_REGISTRY, logger = defaultLogger, cache, dependencies = false, fallback = true, cdnRegistry, childModules } : NPMPollOptions) : NpmWatcher<Object> {
+export const importParent = ({ moduleDetails, path } : {|path : ?string, moduleDetails : ModuleDetails|}) => {
+    const fullPath = path ? join(moduleDetails.modulePath, path) : moduleDetails.modulePath;
 
+    return dynamicRequire(fullPath);
+};
+
+
+export const getFile = async ({ moduleDetails, path } : {|path : ?string, moduleDetails : ModuleDetails|}) => {
+    const filePath = join(moduleDetails.modulePath, path || '');
+
+    setupReadCache();
+
+    if (readCache.has(filePath)) {
+        return readCache.get(filePath);
+    }
+
+    const file = await readFile(filePath);
+    readCache.set(filePath, file);
+    return file;
+};
+
+export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NPM_POLL_INTERVAL, registry = NPM_REGISTRY, logger = defaultLogger, cache, dependencies = false, fallback = true, cdnRegistry, childModules } : NPMPollOptions) : NpmWatcher<Object> {
     const pollers = {};
 
     for (const tag of tags) {
@@ -213,29 +242,15 @@ export function npmPoll({ name, tags = [ DIST_TAG.LATEST ], onError, period = NP
     }
 
     async function pollerImport <T : Object>(path, tag? : ?string) : Promise<T> {
-        return await withPoller(({ modulePath }) => {
-            const fullPath = path ? join(modulePath, path) : modulePath;
-
-            return dynamicRequire(fullPath);
-        }, tag);
+        return await withPoller(moduleDetails => importParent({ moduleDetails, path }), tag);
     }
 
     async function pollerImportDependency <T : Object>(dependencyName, path, tag? : ?string) : Promise<T> {
         return await withPoller((moduleDetails) => importDependency({ dependencyName, path, moduleDetails }), tag);
     }
 
-    const readCache = new LRU(20);
-
     async function pollerRead(path? : string, tag? : ?string) : Promise<string> {
-        return await withPoller(async ({ modulePath }) => {
-            const filePath = join(modulePath, path || '');
-            if (readCache.has(filePath)) {
-                return readCache.get(filePath);
-            }
-            const file = await readFile(filePath);
-            readCache.set(filePath, file);
-            return file;
-        }, tag);
+        return await withPoller((moduleDetails) => getFile({ moduleDetails, path }), tag);
     }
 
     function pollerCancel() {
