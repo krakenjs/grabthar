@@ -12,8 +12,8 @@
 [license-badge]: https://img.shields.io/npm/l/grabthar.svg?style=flat-square
 [license]: https://github.com/krakenjs/grabthar/blob/main/LICENSE
 
-Do it live
-----------
+## Do it live
+
 Because npm installing in production every 30 seconds is a great idea, right? ...right?
 
 ## Quick Start
@@ -27,28 +27,28 @@ npm install --save @krakenjs/grabthar
 Hot deploy and serve up static files:
 
 ```javascript
-import { poll } from '@krakenjs/grabthar';
+import { poll } from "@krakenjs/grabthar";
 
 let watcher = poll({
-  name: 'my-live-updating-module'
+  name: "my-live-updating-module",
 });
 
-app.get('/foo.js', async function handleRequest(req, res) {
+app.get("/foo.js", async function handleRequest(req, res) {
   const { modulePath } = await watcher.get();
-  res.sendFile(`${ modulePath }/dist/foo.js`);
+  res.sendFile(`${modulePath}/dist/foo.js`);
 });
 ```
 
-Or if you're feeling *really* brave, hot deploy and require new code:
+Or if you're feeling _really_ brave, hot deploy and require new code:
 
 ```javascript
-import { poll } from '@krakenjs/grabthar';
+import { poll } from "@krakenjs/grabthar";
 
 let watcher = poll({
-  name: 'my-live-updating-module'
+  name: "my-live-updating-module",
 });
 
-app.get('/api/foo', async function handleRequest(req, res) {
+app.get("/api/foo", async function handleRequest(req, res) {
   const { getFoo } = await watcher.import();
   res.json(getFoo());
 });
@@ -72,16 +72,16 @@ This will automatically set the `latest` tag to the latest version.
 To separate out the deployment and activation of new code, you can make use of different npm dist-tags:
 
 ```javascript
-import { poll } from '@krakenjs/grabthar';
+import { poll } from "@krakenjs/grabthar";
 
 let watcher = poll({
-  name: 'my-live-updating-module',
-  tags: [ 'latest', 'release' ]
+  name: "my-live-updating-module",
+  tags: ["latest", "release"],
 });
 
-app.get('/foo.js', async function handleRequest(req, res) {
-  const { modulePath } = await watcher.get('release');
-  res.sendFile(`${ modulePath }/dist/foo.js`);
+app.get("/foo.js", async function handleRequest(req, res) {
+  const { modulePath } = await watcher.get("release");
+  res.sendFile(`${modulePath}/dist/foo.js`);
 });
 ```
 
@@ -118,7 +118,6 @@ npm dist-tag add my-live-updating-module@x.x.x release
 
 ```javascript
 const {
-
   // The root directory where the module is installed, e.g.
   // /Users/zippy/__live_modules__/my-live-updating-module_1.3.53
   moduleRoot,
@@ -137,8 +136,7 @@ const {
 
   // A map of the dependencies of your module, e.g.
   // { foo: '1.2.3', bar: '0.45.2' }
-  dependencies
-
+  dependencies,
 } = await watcher.get();
 ```
 
@@ -155,4 +153,3 @@ watcher.cancel();
   ```bash
   npm test
   ```
-
