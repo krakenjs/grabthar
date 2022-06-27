@@ -42,6 +42,7 @@
     "jest": "^26",
     "lint-staged": "^13.0.3",
     "nock": "^13",
+    "prettier": "2.7.1",
     "standard-version": "^9.3.2",
     "yargs-parser": "^10.0.0"
   },
