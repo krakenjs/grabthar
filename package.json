@@ -38,6 +38,7 @@
     "@jest/globals": "^26.1.0",
     "@krakenjs/grumbler-scripts": "^8.0.4",
     "flow-bin": "0.130.0",
+    "flow-typed": "^3.8.0",
     "husky": "^7.0.4",
     "jest": "^26",
     "lint-staged": "^13.0.3",
