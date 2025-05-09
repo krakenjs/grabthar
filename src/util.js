@@ -189,15 +189,13 @@ export function resolveModuleDirectory(
     //
   }
 
-  try {
-    // $FlowFixMe
-    dir = require.resolve(name, { paths });
-  } catch (err) {
-    //
-  }
-
   if (!dir) {
-    return;
+    try {
+      // $FlowFixMe
+      dir = require.resolve(name, { paths });
+    } catch (err) {
+      return;
+    }
   }
 
   let output: string = dir;
