@@ -64,10 +64,14 @@ function findPackageJSONForPath(path: string, name: string) {
   }
 
   if (existsSync(join(path, PACKAGE_JSON))) {
-    const pkg = dynamicRequire(join(path, PACKAGE_JSON));
+    try {
+      const pkg = dynamicRequire(join(path, PACKAGE_JSON));
 
-    if (pkg.name === name) {
-      return join(path, PACKAGE_JSON);
+      if (pkg.name === name) {
+        return join(path, PACKAGE_JSON);
+      }
+    } catch (_e) {
+      //
     }
   }
 
