@@ -1,7 +1,7 @@
 /* @flow */
 /* eslint max-lines: off */
 
-import { join, basename, dirname } from "path";
+import { join, basename, dirname, resolve, isAbsolute, sep } from "path";
 import { homedir, tmpdir } from "os";
 
 import {
@@ -13,6 +13,7 @@ import {
   readFileSync,
   ensureDir,
   readdir,
+  lstatSync,
 } from "fs-extra";
 import rmfr from "rmfr";
 import uuid from "uuid";
@@ -50,6 +51,27 @@ export async function createHomeDirectory(
 
 export async function sleep(period: number): Promise<void> {
   return await new Promise((resolve) => setTimeout(resolve, period));
+}
+
+// similar functionality is provided as experimental in Node 22+
+function findPackageJSONForPath(path: string) {
+  if (!isAbsolute(path)) {
+    path = resolve(path);
+  }
+
+  if (!lstatSync(path).isDirectory()) {
+    path = dirname(path);
+  }
+
+  if (existsSync(`${path}/${PACKAGE_JSON}`)) {
+    return `${path}/${PACKAGE_JSON}`;
+  }
+
+  if (path === process.cwd()) {
+    throw new Error(`no package.json found for ${path}`);
+  }
+
+  return findPackageJSON(resolve(dirname(path)));
 }
 
 export function getPromise<T>(): {|
@@ -156,7 +178,7 @@ export function poll<T: mixed>({
 
 export function resolveModuleDirectory(
   name: string,
-  paths?: $ReadOnlyArray<string>
+  paths?: $ReadOnlyArray<string> = [process.cwd()]
 ): ?string {
   let dir;
 
@@ -164,10 +186,29 @@ export function resolveModuleDirectory(
     // $FlowFixMe
     dir = require.resolve(`${name}/${PACKAGE_JSON}`, { paths });
   } catch (err) {
+    //
+  }
+
+  try {
+    // $FlowFixMe
+    dir = require.resolve(name, { paths });
+  } catch (err) {
+    //
+  }
+
+  if (!dir) {
     return;
   }
 
-  return dir.split("/").slice(0, -1).join("/");
+  let output: string = dir;
+
+  if (lstatSync(dir).isDirectory() && existsSync(`${dir}/${PACKAGE_JSON}`)) {
+    output = dir;
+  } else {
+    output = findPackageJSONForPath(dir);
+  }
+
+  return output.split("/").slice(0, -1).join("/");
 }
 
 export async function resolveNodeModulesDirectory(
