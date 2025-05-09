@@ -1,7 +1,7 @@
 /* @flow */
 /* eslint max-lines: off */
 
-import { join, basename, dirname, resolve, isAbsolute, sep } from "path";
+import { join, basename, dirname, resolve, isAbsolute, sep, parse } from "path";
 import { homedir, tmpdir } from "os";
 
 import {
@@ -188,33 +188,29 @@ export function resolveModuleDirectory(
   name: string,
   paths?: $ReadOnlyArray<string> = [process.cwd()]
 ): ?string {
-  let dir;
+  let resolvedPath;
 
   try {
     // $FlowFixMe
-    dir = require.resolve(`${name}/${PACKAGE_JSON}`, { paths });
+    resolvedPath = require.resolve(`${name}/${PACKAGE_JSON}`, { paths });
   } catch (err) {
     //
   }
 
-  if (!dir) {
+  if (!resolvedPath) {
     try {
       // $FlowFixMe
-      dir = require.resolve(name, { paths });
+      resolvedPath = require.resolve(name, { paths });
     } catch (err) {
       return;
     }
   }
 
-  let output: string = dir;
-
-  if (lstatSync(dir).isDirectory() && existsSync(`${dir}/${PACKAGE_JSON}`)) {
-    output = dir;
-  } else {
-    output = findPackageJSONForPath(dir, name);
+  if (parse(resolvedPath).base !== PACKAGE_JSON) {
+    resolvedPath = findPackageJSONForPath(resolvedPath, name);
   }
 
-  return output.split("/").slice(0, -1).join("/");
+  return resolvedPath.split("/").slice(0, -1).join("/");
 }
 
 export async function resolveNodeModulesDirectory(
