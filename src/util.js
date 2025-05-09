@@ -71,7 +71,7 @@ function findPackageJSONForPath(path: string) {
     throw new Error(`no package.json found for ${path}`);
   }
 
-  return findPackageJSON(resolve(dirname(path)));
+  return findPackageJSONForPath(resolve(dirname(path)));
 }
 
 export function getPromise<T>(): {|
