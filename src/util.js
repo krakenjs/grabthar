@@ -88,7 +88,7 @@ function findPackageJSONForPath(path: string, name: string): string {
   }
 
   if (path === process.cwd()) {
-    throw new Error(`no package.json found for ${path}`);
+    throw new Error(`no package.json found for ${name} in ${path}`);
   }
 
   return findPackageJSONForPath(pathResolve(dirname(path)), name);
