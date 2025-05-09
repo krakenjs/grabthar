@@ -54,7 +54,7 @@ export async function sleep(period: number): Promise<void> {
 }
 
 // similar functionality is provided as experimental in Node 22+
-function findPackageJSONForPath(path: string) {
+function findPackageJSONForPath(path: string, name: string) {
   if (!isAbsolute(path)) {
     path = resolve(path);
   }
@@ -64,14 +64,18 @@ function findPackageJSONForPath(path: string) {
   }
 
   if (existsSync(join(path, PACKAGE_JSON))) {
-    return join(path, PACKAGE_JSON);
+    const pkg = dynamicRequire(join(path, PACKAGE_JSON));
+
+    if (pkg.name === name) {
+      return join(path, PACKAGE_JSON);
+    }
   }
 
   if (path === process.cwd()) {
     throw new Error(`no package.json found for ${path}`);
   }
 
-  return findPackageJSONForPath(resolve(dirname(path)));
+  return findPackageJSONForPath(resolve(dirname(path)), name);
 }
 
 export function getPromise<T>(): {|
@@ -203,7 +207,7 @@ export function resolveModuleDirectory(
   if (lstatSync(dir).isDirectory() && existsSync(`${dir}/${PACKAGE_JSON}`)) {
     output = dir;
   } else {
-    output = findPackageJSONForPath(dir);
+    output = findPackageJSONForPath(dir, name);
   }
 
   return output.split("/").slice(0, -1).join("/");
