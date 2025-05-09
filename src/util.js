@@ -1,7 +1,14 @@
 /* @flow */
 /* eslint max-lines: off */
 
-import { join, basename, dirname, resolve, isAbsolute, sep, parse } from "path";
+import {
+  join,
+  basename,
+  dirname,
+  resolve as pathResolve,
+  isAbsolute,
+  parse,
+} from "path";
 import { homedir, tmpdir } from "os";
 
 import {
@@ -29,6 +36,11 @@ export function clearObject<T>(obj: { [string]: T }): void {
   }
 }
 
+export function dynamicRequire<T>(path: string): T {
+  // $FlowFixMe
+  return require(path); // eslint-disable-line security/detect-non-literal-require
+}
+
 export async function createHomeDirectory(
   ...names: $ReadOnlyArray<string>
 ): Promise<string> {
@@ -54,9 +66,9 @@ export async function sleep(period: number): Promise<void> {
 }
 
 // similar functionality is provided as experimental in Node 22+
-function findPackageJSONForPath(path: string, name: string) {
+function findPackageJSONForPath(path: string, name: string): string {
   if (!isAbsolute(path)) {
-    path = resolve(path);
+    path = pathResolve(path);
   }
 
   if (!lstatSync(path).isDirectory()) {
@@ -79,7 +91,7 @@ function findPackageJSONForPath(path: string, name: string) {
     throw new Error(`no package.json found for ${path}`);
   }
 
-  return findPackageJSONForPath(resolve(dirname(path)), name);
+  return findPackageJSONForPath(pathResolve(dirname(path)), name);
 }
 
 export function getPromise<T>(): {|
@@ -564,11 +576,6 @@ export function jumpUpDir(path: string, target: string): ?string {
       return path;
     }
   }
-}
-
-export function dynamicRequire<T>(path: string): T {
-  // $FlowFixMe
-  return require(path); // eslint-disable-line security/detect-non-literal-require
 }
 
 export function dynamicRequireRelative<T>(
