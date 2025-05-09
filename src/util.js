@@ -63,8 +63,8 @@ function findPackageJSONForPath(path: string) {
     path = dirname(path);
   }
 
-  if (existsSync(`${path}/${PACKAGE_JSON}`)) {
-    return `${path}/${PACKAGE_JSON}`;
+  if (existsSync(join(path, PACKAGE_JSON))) {
+    return join(path, PACKAGE_JSON);
   }
 
   if (path === process.cwd()) {
