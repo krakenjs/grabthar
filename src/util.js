@@ -87,7 +87,8 @@ function findPackageJSONForPath(path: string, name: string): string {
     }
   }
 
-  if (path === process.cwd()) {
+  const parsed = parse(path);
+  if (parsed.base === NODE_MODULES || parsed.root === path) {
     throw new Error(`no package.json found for ${name} in ${path}`);
   }
 
