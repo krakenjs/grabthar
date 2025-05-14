@@ -9,23 +9,6 @@ All notable changes to this project will be documented in this file. See [standa
 
 * find json outside cwd ([9bbd92c](https://github.com/krakenjs/grabthar/commit/9bbd92c250a94f4d8a16804ec34b4a0cdc6802a0))
 
-### [6.2.1-alpha.0](https://github.com/krakenjs/grabthar/compare/v6.2.0...v6.2.1-alpha.0) (2025-05-09)
-
-
-### Bug Fixes
-
-* check package name ([065092b](https://github.com/krakenjs/grabthar/commit/065092bd29f18e96b3c2b50f822a1109e5e327c3))
-* cleanup ([72e184d](https://github.com/krakenjs/grabthar/commit/72e184d6d9bc417cc3b43830a84c408888642bac))
-* error description ([97ca7ba](https://github.com/krakenjs/grabthar/commit/97ca7bac2e142d1da7bd69b2a12b05fafea7d82b))
-* grumbler scripts 8 ([#24](https://github.com/krakenjs/grabthar/issues/24)) ([911c670](https://github.com/krakenjs/grabthar/commit/911c670107dade67423f0cd9be027ba6b4bae2e3))
-* handle exports fields in getFallback ([f8d4e3d](https://github.com/krakenjs/grabthar/commit/f8d4e3d24438e252c2e067d8cc3d527281f8a916))
-* handle require error ([cd5e231](https://github.com/krakenjs/grabthar/commit/cd5e231cedc4fa02b4256a8cf148f47b85e45333))
-* join ([061fd5c](https://github.com/krakenjs/grabthar/commit/061fd5cb23c4e8662a43d4d9809a5366a9a361ed))
-* linting ([13d15e1](https://github.com/krakenjs/grabthar/commit/13d15e17b31b7bada328c693872411acb58e3f29))
-* simplify ([af59097](https://github.com/krakenjs/grabthar/commit/af590972a85d393c3490896eadb540ae3dfbcee1))
-* typo ([0a86533](https://github.com/krakenjs/grabthar/commit/0a8653339dc7bc2245d9d7fa496094412af3ff7f))
-
-
 * **docs:** update github actions badge url ([43b4b06](https://github.com/krakenjs/grabthar/commit/43b4b06c204e1580eddbdaa3691df89b4ce57e42))
 * remove token from publish action ([cfb4684](https://github.com/krakenjs/grabthar/commit/cfb468493480935969ac3e193625ccc345293420))
 
