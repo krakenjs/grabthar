@@ -5,13 +5,14 @@ import { homedir } from "os";
 import { join } from "path";
 
 import nock from "nock";
-import { test, expect } from "@jest/globals";
+import { test, expect, describe } from "@jest/globals";
 import { exists } from "fs-extra";
 import rmfr from "rmfr";
 
 import { wrapPromise, entries } from "./lib";
 
 import { poll } from "../src";
+import { getFallback } from "../src/poll";
 
 const logger = {
   debug: () => {
@@ -1188,5 +1189,43 @@ test(`Should poll for a module and install it with dependencies, then return the
     for (const dependencyNock of dependencyNocks) {
       dependencyNock.done();
     }
+  });
+});
+
+describe("getFallback", () => {
+  const cwd = process.cwd();
+
+  beforeEach(() => {
+    process.chdir(cwd);
+  });
+
+  test("should handle exports fields", async () => {
+    process.chdir(`${__dirname}/mocks/node_modules/`);
+    const {
+      nodeModulesPath,
+      modulePath,
+      version,
+      previousVersion,
+      dependencies,
+    } = await getFallback("grabthar-test-module");
+
+    expect(modulePath).toBe(
+      `${__dirname}/mocks/node_modules/grabthar-test-module`
+    );
+    expect(nodeModulesPath).toBe(`${__dirname}/mocks/node_modules`);
+    expect(version).toBe("1.0.95");
+    expect(previousVersion).toBe("1.0.95");
+    expect(dependencies).toEqual(
+      expect.objectContaining({
+        "grabthar-test-module-exports": {
+          version: "0.2.1",
+          path: `${__dirname}/mocks/node_modules/grabthar-test-module-exports`,
+        },
+        "grabthar-test-module-more-exports": {
+          version: "0.2.2",
+          path: `${__dirname}/mocks/node_modules/grabthar-test-module-more-exports`,
+        },
+      })
+    );
   });
 });

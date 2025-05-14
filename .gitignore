@@ -1,5 +1,5 @@
 node_modules
-flow-typed
+!test/mocks/node_modules
 npm-debug.log
 
 .DS_Store

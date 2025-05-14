@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [6.2.1-alpha.1](https://github.com/krakenjs/grabthar/compare/v6.2.1-alpha.0...v6.2.1-alpha.1) (2025-05-11)
+
+
+### Bug Fixes
+
+* find json outside cwd ([9bbd92c](https://github.com/krakenjs/grabthar/commit/9bbd92c250a94f4d8a16804ec34b4a0cdc6802a0))
+
+* **docs:** update github actions badge url ([43b4b06](https://github.com/krakenjs/grabthar/commit/43b4b06c204e1580eddbdaa3691df89b4ce57e42))
+* remove token from publish action ([cfb4684](https://github.com/krakenjs/grabthar/commit/cfb468493480935969ac3e193625ccc345293420))
+
 ## [6.2.0](https://github.com/krakenjs/grabthar/compare/v6.1.1...v6.2.0) (2022-08-02)
 
 

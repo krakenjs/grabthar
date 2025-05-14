@@ -1,7 +1,14 @@
 /* @flow */
 /* eslint max-lines: off */
 
-import { join, basename, dirname } from "path";
+import {
+  join,
+  basename,
+  dirname,
+  resolve as pathResolve,
+  isAbsolute,
+  parse,
+} from "path";
 import { homedir, tmpdir } from "os";
 
 import {
@@ -13,6 +20,7 @@ import {
   readFileSync,
   ensureDir,
   readdir,
+  lstatSync,
 } from "fs-extra";
 import rmfr from "rmfr";
 import uuid from "uuid";
@@ -26,6 +34,11 @@ export function clearObject<T>(obj: { [string]: T }): void {
   for (const key of Object.keys(obj)) {
     delete obj[key];
   }
+}
+
+export function dynamicRequire<T>(path: string): T {
+  // $FlowFixMe
+  return require(path); // eslint-disable-line security/detect-non-literal-require
 }
 
 export async function createHomeDirectory(
@@ -50,6 +63,36 @@ export async function createHomeDirectory(
 
 export async function sleep(period: number): Promise<void> {
   return await new Promise((resolve) => setTimeout(resolve, period));
+}
+
+// similar functionality is provided as experimental in Node 22+
+function findPackageJSONForPath(path: string, name: string): string {
+  if (!isAbsolute(path)) {
+    path = pathResolve(path);
+  }
+
+  if (!lstatSync(path).isDirectory()) {
+    path = dirname(path);
+  }
+
+  if (existsSync(join(path, PACKAGE_JSON))) {
+    try {
+      const pkg = dynamicRequire(join(path, PACKAGE_JSON));
+
+      if (pkg.name === name) {
+        return join(path, PACKAGE_JSON);
+      }
+    } catch (_e) {
+      //
+    }
+  }
+
+  const parsed = parse(path);
+  if (parsed.base === NODE_MODULES || parsed.root === path) {
+    throw new Error(`no package.json found for ${name} in ${path}`);
+  }
+
+  return findPackageJSONForPath(pathResolve(dirname(path)), name);
 }
 
 export function getPromise<T>(): {|
@@ -156,18 +199,31 @@ export function poll<T: mixed>({
 
 export function resolveModuleDirectory(
   name: string,
-  paths?: $ReadOnlyArray<string>
+  paths?: $ReadOnlyArray<string> = [process.cwd()]
 ): ?string {
-  let dir;
+  let resolvedPath;
 
   try {
     // $FlowFixMe
-    dir = require.resolve(`${name}/${PACKAGE_JSON}`, { paths });
+    resolvedPath = require.resolve(`${name}/${PACKAGE_JSON}`, { paths });
   } catch (err) {
-    return;
+    //
   }
 
-  return dir.split("/").slice(0, -1).join("/");
+  if (!resolvedPath) {
+    try {
+      // $FlowFixMe
+      resolvedPath = require.resolve(name, { paths });
+    } catch (err) {
+      return;
+    }
+  }
+
+  if (parse(resolvedPath).base !== PACKAGE_JSON) {
+    resolvedPath = findPackageJSONForPath(resolvedPath, name);
+  }
+
+  return resolvedPath.split("/").slice(0, -1).join("/");
 }
 
 export async function resolveNodeModulesDirectory(
@@ -521,11 +577,6 @@ export function jumpUpDir(path: string, target: string): ?string {
       return path;
     }
   }
-}
-
-export function dynamicRequire<T>(path: string): T {
-  // $FlowFixMe
-  return require(path); // eslint-disable-line security/detect-non-literal-require
 }
 
 export function dynamicRequireRelative<T>(
