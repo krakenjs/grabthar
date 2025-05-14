@@ -8,7 +8,7 @@
     "babel": "babel src --ignore=node_modules --out-dir src --source-maps inline",
     "format": "prettier --write --ignore-unknown .",
     "format:check": "prettier --check .",
-    "test": "npm run format:check && npm run lint && npm run flow-typed && npm run flow && npm run jest:ci",
+    "test": "npm run format:check && npm run lint && npm run flow && npm run jest:ci",
     "flow": "flow",
     "lint": "eslint src/ test/ *.js",
     "jest": "jest test --env=node",
