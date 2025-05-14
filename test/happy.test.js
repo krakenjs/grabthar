@@ -1221,6 +1221,10 @@ describe("getFallback", () => {
           version: "0.2.1",
           path: `${__dirname}/mocks/node_modules/grabthar-test-module-exports`,
         },
+        "grabthar-test-module-more-exports": {
+          version: "0.2.2",
+          path: `${__dirname}/mocks/node_modules/grabthar-test-module-more-exports`,
+        },
       })
     );
   });
